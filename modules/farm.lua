@@ -38,26 +38,37 @@ local function rebuildHudButtons()
   local hw = C.HUD_W
   local hy = C.HUD_OY + 90
 
+  local robotRowH = 50
   for i, r in ipairs(State.robots) do
-    local rowY = hy + (i - 1) * 50
-    hudBtn("robot_task_" .. i, hx, rowY, 240, 40,
-      string.format("%s: %s", r.name, r.task),
-      function()
-        local idx
-        for j, t in ipairs(C.TASKS) do if t == r.task then idx = j break end end
-        idx = (idx % #C.TASKS) + 1
-        r.task = C.TASKS[idx]
-        r.state = "idle"
-      end)
-    hudBtn("robot_speed_" .. i, hx + 250, rowY, 160, 40,
-      r.upgraded and "Speed: fast" or ("Speed $" .. C.ROBOT_UPGRADE_COST),
+    local rowY = hy + (i - 1) * robotRowH
+
+    hudBtn("robot_name_" .. i, hx, rowY, 80, 40, r.name, function() end,
+      { selected = true, nameLabel = true })
+
+    local chipX = hx + 86
+    for ti, taskName in ipairs(C.TASKS) do
+      local chipW = 62
+      hudBtn("robot_t_" .. i .. "_" .. ti, chipX, rowY, chipW, 40,
+        taskName,
+        function()
+          r.task = taskName
+          r.state = "idle"
+          r.idleTimer = 0
+        end,
+        { active = (r.task == taskName) })
+      chipX = chipX + chipW + 4
+    end
+
+    hudBtn("robot_speed_" .. i, chipX + 4, rowY, 100, 40,
+      r.upgraded and "Fast" or ("Speed $" .. C.ROBOT_UPGRADE_COST),
       function()
         if not r.upgraded and State.money >= C.ROBOT_UPGRADE_COST then
           State.money = State.money - C.ROBOT_UPGRADE_COST
           r.speed = C.ROBOT_SPEED_UP
           r.upgraded = true
         end
-      end)
+      end,
+      { disabled = r.upgraded })
   end
 
   local buyY = hy + (#State.robots) * 50 + 12
@@ -87,9 +98,10 @@ local function rebuildHudButtons()
     { disabled = not canBuySeed })
 
   local modeY = buyY + 56
-  hudBtn("mode_none",   hx,           modeY, 110, 40, "Look",   function() State.mode = "none" end,   {active = State.mode=="none"})
-  hudBtn("mode_stick",  hx + 120,     modeY, 110, 40, "Stick",  function() State.mode = "stick" end,  {active = State.mode=="stick"})
-  hudBtn("mode_delete", hx + 240,     modeY, 130, 40, "Dig up", function() State.mode = "delete" end, {active = State.mode=="delete"})
+  hudBtn("mode_plant",   hx,         modeY, 120, 40, "Plant",   function() State.mode = "plant" end,   {active = State.mode=="plant"})
+  hudBtn("mode_harvest", hx + 126,   modeY, 120, 40, "Harvest", function() State.mode = "harvest" end, {active = State.mode=="harvest"})
+  hudBtn("mode_stick",   hx + 252,   modeY, 140, 40, "Stick $" .. C.STICK_COST, function() State.mode = "stick" end, {active = State.mode=="stick"})
+  hudBtn("mode_delete",  hx + 398,   modeY, 120, 40, "Dig up",  function() State.mode = "delete" end,  {active = State.mode=="delete"})
 
   local seedHeaderY = modeY + 60
   local seedY = seedHeaderY + 30
@@ -119,6 +131,7 @@ local function tileFill(t)
   if t.state == "wild"   then return 0.30, 0.22, 0.16 end
   if t.state == "tilled" then return 0.45, 0.30, 0.18 end
   if t.state == "growing" or t.state == "ripe" then return 0.38, 0.27, 0.17 end
+  if t.state == "stick"  then return 0.42, 0.28, 0.18 end
   return 0.2, 0.2, 0.2
 end
 
@@ -154,7 +167,23 @@ local function drawGrid()
       if t.crop then
         local cx, cy = sx + C.TILE * 0.5, sy + C.TILE * 0.5
         local growthScale = 0.4 + 0.6 * t.crop.growth
+
+        if t.state == "ripe" then
+          local pulse = 0.5 + 0.5 * math.sin(State.time * 4)
+          love.graphics.setColor(1, 0.95, 0.3, 0.25 + 0.35 * pulse)
+          love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+          love.graphics.setColor(1, 0.9, 0.2, 0.7 + 0.3 * pulse)
+          love.graphics.setLineWidth(3)
+          love.graphics.rectangle("line", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+          love.graphics.setLineWidth(1)
+        end
+
         drawCenteredEmoji(fontEmojiHuge, t.crop.pheno.emoji, cx, cy, (C.TILE * 0.6 / EMOJI_NATIVE) * growthScale)
+
+        if t.state == "ripe" then
+          local bob = math.sin(State.time * 6) * 4
+          drawCenteredEmoji(fontEmoji, C.RIPE_GLYPH, sx + C.TILE - 18, sy + 18 + bob, 28 / EMOJI_NATIVE)
+        end
 
         love.graphics.setColor(0, 0, 0, 0.35)
         love.graphics.rectangle("fill", sx + 6, sy + C.TILE - 12, C.TILE - 12, 6, 2, 2)
@@ -174,32 +203,38 @@ local function drawGrid()
   for y = 1, C.GRID_H do
     for x = 1, C.GRID_W do
       local t = State.tiles[y][x]
-      if t.stickE then
+      if t.state == "stick" then
         local sx, sy = State.tileToScreen(x, y)
-        love.graphics.setColor(0.55, 0.38, 0.20, 1)
-        love.graphics.rectangle("fill", sx + C.TILE * 0.5, sy + 8, C.TILE, C.TILE - 16, 6, 6)
-        love.graphics.setColor(0.75, 0.55, 0.28, 1)
-        love.graphics.rectangle("line", sx + C.TILE * 0.5, sy + 8, C.TILE, C.TILE - 16, 6, 6)
-      end
-      if t.stickS then
-        local sx, sy = State.tileToScreen(x, y)
-        love.graphics.setColor(0.55, 0.38, 0.20, 1)
-        love.graphics.rectangle("fill", sx + 8, sy + C.TILE * 0.5, C.TILE - 16, C.TILE, 6, 6)
-        love.graphics.setColor(0.75, 0.55, 0.28, 1)
-        love.graphics.rectangle("line", sx + 8, sy + C.TILE * 0.5, C.TILE - 16, C.TILE, 6, 6)
+        local cx, cy = sx + C.TILE * 0.5, sy + C.TILE * 0.5
+        drawCenteredEmoji(fontEmojiHuge, C.STICK_EMOJI, cx, cy, C.TILE * 0.75 / EMOJI_NATIVE)
       end
     end
   end
 
-  if State.mode == "stick" and State.hoverEdge then
-    local e = State.hoverEdge
-    local sx, sy = State.tileToScreen(e.x, e.y)
-    love.graphics.setColor(1, 1, 0.4, 0.5)
-    if e.dir == "E" then
-      love.graphics.rectangle("fill", sx + C.TILE * 0.5, sy + 8, C.TILE, C.TILE - 16, 6, 6)
+  if State.mode == "stick" and State.hoverTile then
+    local sx, sy = State.tileToScreen(State.hoverTile.x, State.hoverTile.y)
+    if State.hoverTile.state == "tilled" and State.money >= C.STICK_COST then
+      love.graphics.setColor(0.85, 0.7, 0.3, 0.4)
     else
-      love.graphics.rectangle("fill", sx + 8, sy + C.TILE * 0.5, C.TILE - 16, C.TILE, 6, 6)
+      love.graphics.setColor(0.7, 0.3, 0.3, 0.35)
     end
+    love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+  elseif State.mode == "plant" and State.hoverTile then
+    local sx, sy = State.tileToScreen(State.hoverTile.x, State.hoverTile.y)
+    if State.hoverTile.state == "tilled" then
+      love.graphics.setColor(0.4, 0.9, 0.4, 0.35)
+    else
+      love.graphics.setColor(0.7, 0.3, 0.3, 0.3)
+    end
+    love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+  elseif State.mode == "harvest" and State.hoverTile then
+    local sx, sy = State.tileToScreen(State.hoverTile.x, State.hoverTile.y)
+    if State.hoverTile.state == "ripe" then
+      love.graphics.setColor(0.4, 0.9, 0.4, 0.4)
+    else
+      love.graphics.setColor(0.7, 0.3, 0.3, 0.3)
+    end
+    love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
   elseif State.mode == "delete" and State.hoverTile then
     local sx, sy = State.tileToScreen(State.hoverTile.x, State.hoverTile.y)
     love.graphics.setColor(1, 0.3, 0.3, 0.4)
@@ -281,9 +316,9 @@ local function drawHud()
   local helpY = 1080 - 90
   love.graphics.setFont(fontUI)
   love.graphics.setColor(0.6, 0.6, 0.7, 1)
-  love.graphics.print("Stick mode: click edge between 2 ripe crops to breed.", C.HUD_X, helpY)
-  love.graphics.print("Dig mode: click crop tile to remove (back to wild).",  C.HUD_X, helpY + 22)
-  love.graphics.print("Esc to quit. Selected seed = highlighted green.",       C.HUD_X, helpY + 44)
+  love.graphics.print("Plant mode: click tilled tile to plant selected seed.", C.HUD_X, helpY)
+  love.graphics.print("Stick mode: click tilled tile; 2+ ripe neighbors -> hybrid grows here.", C.HUD_X, helpY + 22)
+  love.graphics.print("Dig mode: click any tile -> back to wild. Esc quits.",   C.HUD_X, helpY + 44)
 end
 
 function Farm.draw()
@@ -294,7 +329,6 @@ function Farm.draw()
 end
 
 local function pickHover(sx, sy)
-  State.hoverEdge = nil
   State.hoverTile = nil
 
   if sx < C.GRID_OX or sx > C.GRID_OX + C.GRID_W * C.TILE then return end
@@ -303,17 +337,6 @@ local function pickHover(sx, sy)
   local tx, ty = State.screenToTile(sx, sy)
   if not tx then return end
   State.hoverTile = State.tileAt(tx, ty)
-
-  if State.mode ~= "stick" then return end
-
-  local lx = sx - (C.GRID_OX + (tx - 1) * C.TILE)
-  local ly = sy - (C.GRID_OY + (ty - 1) * C.TILE)
-  local edgeMargin = 18
-  if lx > C.TILE - edgeMargin and tx < C.GRID_W then
-    State.hoverEdge = { x = tx, y = ty, dir = "E" }
-  elseif ly > C.TILE - edgeMargin and ty < C.GRID_H then
-    State.hoverEdge = { x = tx, y = ty, dir = "S" }
-  end
 end
 
 function Farm.mousemoved(x, y) pickHover(x, y) end
@@ -333,19 +356,34 @@ function Farm.mousepressed(x, y, btn)
   local tx, ty = State.screenToTile(x, y)
   if not tx then return end
   local tile = State.tileAt(tx, ty)
-  if State.mode == "stick" and State.hoverEdge then
-    local t = State.tileAt(State.hoverEdge.x, State.hoverEdge.y)
-    if t then
-      if State.hoverEdge.dir == "E" then t.stickE = true end
-      if State.hoverEdge.dir == "S" then t.stickS = true end
+  if State.mode == "stick" and tile then
+    if tile.state == "tilled" and State.money >= C.STICK_COST then
+      State.money = State.money - C.STICK_COST
+      tile.state = "stick"
+      tile.crop = nil
     end
   elseif State.mode == "delete" and tile then
     if tile.state ~= "wild" then
       tile.state = "wild"
       tile.crop = nil
-      tile.stickE = false
-      tile.stickS = false
     end
+  elseif State.mode == "plant" and tile then
+    if tile.state == "tilled" then
+      local seed = State.selectedSeed()
+      if seed then
+        local Genetics = require("farm.genetics")
+        tile.crop = {
+          genome = seed.genome,
+          pheno  = Genetics.phenotype(seed.genome),
+          growth = 0,
+          water  = 1.0,
+        }
+        tile.state = "growing"
+        State.removeSeed(seed.id)
+      end
+    end
+  elseif State.mode == "harvest" and tile then
+    require("farm.harvest").harvestTile(tile)
   end
 end
 

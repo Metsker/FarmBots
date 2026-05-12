@@ -9,7 +9,7 @@ return {
   HUD_W = 660,
   HUD_OY = 32,
 
-  TASKS = { "Idle", "Till", "Plant", "Water", "Harvest", "Weed" },
+  TASKS = { "Idle", "Till", "Water", "Weed" },
 
   CROPS = {
     { name="Tomato",     emoji="🍅" },
@@ -26,7 +26,7 @@ return {
     { name="Coconut",    emoji="🥥" },
   },
 
-  WORK_TIME = { Till=2.0, Plant=1.0, Water=1.5, Harvest=1.0, Weed=1.5 },
+  WORK_TIME = { Till=2.0, Water=1.5, Weed=1.5 },
 
   ROBOT_SPEED       = 2,
   ROBOT_SPEED_UP    = 3,
@@ -37,6 +37,7 @@ return {
 
   SEED_BASE_COST = 15,
   SEED_COST_EXP  = 1.35,
+  STICK_COST     = 8,
 
   ROBOT_NAMES = {
     "Beep", "Bop", "Tin", "Rusty", "Cog", "Sprocket", "Bolt", "Whirr",
@@ -59,9 +60,9 @@ return {
   TASK_GLYPH = {
     Idle    = "💤",
     Till    = "🚜",
-    Plant   = "🌱",
     Water   = "💧",
-    Harvest = "🧺",
     Weed    = "🪓",
   },
+
+  RIPE_GLYPH = "✨",
 }

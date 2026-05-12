@@ -11,8 +11,6 @@ local function newTile(x, y)
     weed = false,
     growth = 0,
     water = 0,
-    stickE = false,
-    stickS = false,
   }
 end
 
@@ -30,7 +28,7 @@ function State.init()
   State.money = 0
   State.time  = 0
   State.weedTimer = C.WEED_SPAWN_INTERVAL
-  State.mode = "none"
+  State.mode = "plant"
   State.hoverEdge = nil
   State.hoverTile = nil
   State.selectedSeedId = 1
@@ -55,10 +53,8 @@ function State.init()
 
   State._usedNames = {}
   State.robots = {
-    State.newRobot(C.GRID_W * 0.5 - 1, C.GRID_H * 0.5, "Till"),
-    State.newRobot(C.GRID_W * 0.5,     C.GRID_H * 0.5, "Plant"),
+    State.newRobot(C.GRID_W * 0.5,     C.GRID_H * 0.5, "Till"),
     State.newRobot(C.GRID_W * 0.5 + 1, C.GRID_H * 0.5, "Water"),
-    State.newRobot(C.GRID_W * 0.5 + 2, C.GRID_H * 0.5, "Harvest"),
   }
 end
 

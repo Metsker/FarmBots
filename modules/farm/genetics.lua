@@ -17,6 +17,14 @@ local function mutate(value, kind)
   return value
 end
 
+function Genetics.cloneGenome(g)
+  return {
+    yield    = { g.yield[1],    g.yield[2] },
+    growTime = { g.growTime[1], g.growTime[2] },
+    color    = { g.color[1],    g.color[2] },
+  }
+end
+
 function Genetics.baseGenome(cropIndex, yield, growTime)
   return {
     yield    = { yield, yield },
