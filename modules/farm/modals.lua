@@ -1,301 +1,262 @@
-local FlexLove = require("flexlove.FlexLove")
-local Color = FlexLove.Color
 local C = require("farm.constants")
 local State = require("farm.state")
 
 local Modals = {}
 
-local root
-local bestiaryRows
-local kind
+local fonts = {}
+local buttons = {}
+local scroll = 0
+local scrollMax = 0
+local lastModal
 
-local function closeModal()
+local function close()
   State.openModal = nil
 end
 
-local function noop() end
-
-local function destroy()
-  if root then
-    root:destroy()
-    root = nil
-  end
-  bestiaryRows = nil
-  kind = nil
+local function hitBtn(x, y, w, h, onClick)
+  buttons[#buttons + 1] = { x = x, y = y, w = w, h = h, onClick = onClick }
 end
 
-local function emojiSlot(parent, size)
-  return FlexLove.new({
-    parent = parent,
-    width = size, height = size,
-  })
+local function isHover(x, y, w, h)
+  local mx, my = love.mouse.getPosition()
+  return mx >= x and mx <= x + w and my >= y and my <= y + h
 end
 
-local function textCell(parent, txt, width, align, color)
-  return FlexLove.new({
-    parent = parent,
-    width = width, height = 30,
-    text = txt or "",
-    textSize = 14,
-    textAlign = align or "start",
-    textColor = color or Color.new(0.85, 0.85, 0.92, 1),
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = (align == "center") and "center" or ((align == "end") and "flex-end" or "flex-start"),
-  })
+local function centerEmoji(font, glyph, cx, cy, scale, tint)
+  love.graphics.setFont(font)
+  local c = tint or { 1, 1, 1 }
+  love.graphics.setColor(c[1], c[2], c[3], 1)
+  local w = font:getWidth(glyph) * scale
+  local h = font:getHeight() * scale
+  love.graphics.print(glyph, cx - w * 0.5, cy - h * 0.5, 0, scale, scale)
 end
 
-local function buildBestiary()
-  bestiaryRows = {}
-  local W, H = 720, 640
+local function centerText(font, txt, cx, y)
+  love.graphics.setFont(font)
+  local w = font:getWidth(txt)
+  love.graphics.print(txt, cx - w * 0.5, y)
+end
 
-  local backdrop = FlexLove.new({
-    x = 0, y = 0,
-    width = 1920, height = 1080,
-    positioning = "flex",
-    justifyContent = "center",
-    alignItems = "center",
-    backgroundColor = Color.new(0, 0, 0, 0.55),
-    z = 0,
-    onEvent = function(_, e)
-      if e.type == "release" or e.type == "click" then closeModal() end
-    end,
-  })
+function Modals.setFonts(f)
+  fonts = f
+end
 
-  local panel = FlexLove.new({
-    parent = backdrop,
-    width = W, height = H,
-    positioning = "flex",
-    backgroundColor = Color.new(0.10, 0.10, 0.14, 1),
-    borderColor = Color.new(0.55, 0.55, 0.70, 1),
-    border = 1,
-    cornerRadius = 8,
-    padding = 20,
-    flexDirection = "vertical",
-    gap = 8,
-    z = 10,
-    onEvent = noop,
-  })
+local function drawBestiary()
+  local W, H = 960, 860
+  local px = (1920 - W) * 0.5
+  local py = (1080 - H) * 0.5
+
+  love.graphics.setColor(0, 0, 0, 0.55)
+  love.graphics.rectangle("fill", 0, 0, 1920, 1080)
+  hitBtn(0, 0, 1920, 1080, close)
+
+  love.graphics.setColor(0.10, 0.10, 0.14, 1)
+  love.graphics.rectangle("fill", px, py, W, H, 8, 8)
+  love.graphics.setColor(0.55, 0.55, 0.70, 1)
+  love.graphics.rectangle("line", px, py, W, H, 8, 8)
+  hitBtn(px, py, W, H, function() end)
 
   local discoveredCount = 0
   for _, n in pairs(State.discovered or {}) do
     if n > 0 then discoveredCount = discoveredCount + 1 end
   end
 
-  FlexLove.new({
-    parent = panel,
-    width = "100%", height = 32,
-    text = string.format("Bestiary  %d / %d", discoveredCount, #C.CROP_RECIPES),
-    textSize = 24,
-    textColor = Color.new(1, 0.95, 0.55, 1),
-    textAlign = "center",
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = "center",
-  })
+  love.graphics.setColor(1, 0.95, 0.55, 1)
+  centerText(fonts.uiBig, string.format("Bestiary  %d / %d", discoveredCount, #C.CROP_RECIPES), px + W * 0.5, py + 20)
 
-  FlexLove.new({
-    parent = panel,
-    width = "100%", height = 16,
-    text = "Esc / B / click outside to close",
-    textSize = 12,
-    textColor = Color.new(0.55, 0.55, 0.65, 1),
-    textAlign = "center",
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = "center",
-  })
+  love.graphics.setColor(0.55, 0.55, 0.65, 1)
+  centerText(fonts.uiSmall, "Esc / B / click outside to close", px + W * 0.5, py + 56)
 
-  local list = FlexLove.new({
-    parent = panel,
-    width = "100%",
-    flex = 1,
-    positioning = "flex",
-    flexDirection = "vertical",
-    gap = 4,
-  })
+  local listX = px + 16
+  local listY = py + 84
+  local listW = W - 32
+  local listH = H - 84 - 16
+
+  local rowH = 38
+  local rowGap = 4
+  local stride = rowH + rowGap
+  local contentH = #C.CROP_RECIPES * stride - rowGap
+  scrollMax = math.max(0, contentH - listH)
+  if scroll > scrollMax then scroll = scrollMax end
+  if scroll < 0 then scroll = 0 end
+
+  love.graphics.setScissor(listX, listY, listW, listH)
+
+  local emojiNative = fonts.emojiNative
+  local slot = 28
+  local emojiScale = (slot * 0.95) / emojiNative
 
   for ri, r in ipairs(C.CROP_RECIPES) do
     local count = (State.discovered and State.discovered[ri]) or 0
     local found = count > 0
-    local row = FlexLove.new({
-      parent = list,
-      width = "100%", height = 34,
-      positioning = "flex",
-      flexDirection = "horizontal",
-      alignItems = "center",
-      gap = 6,
-      backgroundColor = found and Color.new(0.16, 0.22, 0.17, 1) or Color.new(0.14, 0.14, 0.18, 1),
-      cornerRadius = 4,
-      padding = { top = 0, right = 8, bottom = 0, left = 8 },
-    })
-
-    local aCrop = C.CROPS[C.CROP_INDEX[r.a]]
-    local bCrop = C.CROPS[C.CROP_INDEX[r.b]]
-    local rCrop = C.CROPS[C.CROP_INDEX[r.result]]
-
-    local slotA = emojiSlot(row, 26)
-    textCell(row, found and r.a or "???", 86, "start", Color.new(0.88, 0.88, 0.94, 1))
-    textCell(row, "+", 12, "center", Color.new(0.7, 0.7, 0.8, 1))
-    local slotB = emojiSlot(row, 26)
-    textCell(row, found and r.b or "???", 86, "start", Color.new(0.88, 0.88, 0.94, 1))
-    textCell(row, "->", 22, "center", Color.new(0.7, 0.7, 0.8, 1))
-    local slotR = emojiSlot(row, 26)
-    textCell(row, found and r.result or "???", 100, "start", Color.new(1, 0.95, 0.55, 1))
-    textCell(row, found and string.format("%d%%", math.floor(r.chance * 100 + 0.5)) or "??%", 50, "end", Color.new(0.7, 0.85, 1, 1))
-    textCell(row, found and ("x" .. count) or "", 44, "end", Color.new(0.65, 0.90, 0.65, 1))
-
-    bestiaryRows[#bestiaryRows + 1] = {
-      slotA = slotA, slotB = slotB, slotR = slotR,
-      glyphA = aCrop.emoji, glyphB = bCrop.emoji, glyphR = rCrop.emoji,
-      tintA = aCrop.color, tintB = bCrop.color, tintR = rCrop.color,
-      found = found,
-    }
-  end
-
-  root = backdrop
-  kind = "bestiary"
-end
-
-local function buildResetConfirm()
-  local W, H = 380, 170
-
-  local backdrop = FlexLove.new({
-    x = 0, y = 0,
-    width = 1920, height = 1080,
-    positioning = "flex",
-    justifyContent = "center",
-    alignItems = "center",
-    backgroundColor = Color.new(0, 0, 0, 0.55),
-    z = 0,
-    onEvent = function(_, e)
-      if e.type == "release" or e.type == "click" then closeModal() end
-    end,
-  })
-
-  local panel = FlexLove.new({
-    parent = backdrop,
-    width = W, height = H,
-    positioning = "flex",
-    backgroundColor = Color.new(0.12, 0.12, 0.16, 1),
-    borderColor = Color.new(0.6, 0.6, 0.7, 1),
-    border = 1,
-    cornerRadius = 8,
-    padding = 16,
-    flexDirection = "vertical",
-    gap = 8,
-    z = 10,
-    onEvent = noop,
-  })
-
-  FlexLove.new({
-    parent = panel,
-    width = "100%", height = 32,
-    text = "Reset save?",
-    textSize = 22,
-    textColor = Color.new(1, 0.95, 0.6, 1),
-    textAlign = "center",
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = "center",
-  })
-
-  FlexLove.new({
-    parent = panel,
-    width = "100%", height = 22,
-    text = "All progress will be deleted.",
-    textSize = 14,
-    textColor = Color.new(0.85, 0.85, 0.9, 1),
-    textAlign = "center",
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = "center",
-  })
-
-  local btnRow = FlexLove.new({
-    parent = panel,
-    width = "100%",
-    flex = 1,
-    positioning = "flex",
-    flexDirection = "horizontal",
-    justifyContent = "space-between",
-    alignItems = "flex-end",
-  })
-
-  FlexLove.new({
-    parent = btnRow,
-    width = 150, height = 40,
-    text = "Yes, reset",
-    textSize = 14,
-    textColor = Color.new(1, 1, 1, 1),
-    textAlign = "center",
-    backgroundColor = Color.new(0.55, 0.28, 0.18, 1),
-    borderColor = Color.new(0.7, 0.5, 0.3, 1),
-    border = 1,
-    cornerRadius = 6,
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = "center",
-    onEvent = function(_, e)
-      if e.type == "release" or e.type == "click" then
-        local Save = require("farm.save")
-        Save.reset()
-        closeModal()
+    local rowY = listY + (ri - 1) * stride - scroll
+    if rowY + rowH >= listY and rowY <= listY + listH then
+      if found then
+        love.graphics.setColor(0.16, 0.22, 0.17, 1)
+      else
+        love.graphics.setColor(0.14, 0.14, 0.18, 1)
       end
-    end,
-  })
+      love.graphics.rectangle("fill", listX, rowY, listW, rowH, 4, 4)
 
-  FlexLove.new({
-    parent = btnRow,
-    width = 150, height = 40,
-    text = "Cancel",
-    textSize = 14,
-    textColor = Color.new(1, 1, 1, 1),
-    textAlign = "center",
-    backgroundColor = Color.new(0.22, 0.22, 0.28, 1),
-    borderColor = Color.new(0.55, 0.55, 0.65, 1),
-    border = 1,
-    cornerRadius = 6,
-    positioning = "flex",
-    alignItems = "center",
-    justifyContent = "center",
-    onEvent = function(_, e)
-      if e.type == "release" or e.type == "click" then closeModal() end
-    end,
-  })
+      local aCrop = C.CROPS[C.CROP_INDEX[r.a]]
+      local bCrop = C.CROPS[C.CROP_INDEX[r.b]]
+      local rCrop = C.CROPS[C.CROP_INDEX[r.result]]
 
-  root = backdrop
-  kind = "resetConfirm"
-end
+      local cy = rowY + rowH * 0.5
+      local textY = cy - fonts.ui:getHeight() * 0.5
+      local cx = listX + 12
 
-function Modals.syncTo(modalName)
-  if kind == modalName then return end
-  destroy()
-  if modalName == "bestiary" then buildBestiary()
-  elseif modalName == "resetConfirm" then buildResetConfirm() end
-end
+      local function drawCropCell(crop, name, nameColor, nameW)
+        centerEmoji(fonts.emoji, crop.emoji, cx + slot * 0.5, cy, emojiScale, crop.color)
+        cx = cx + slot + 6
+        love.graphics.setFont(fonts.ui)
+        love.graphics.setColor(nameColor[1], nameColor[2], nameColor[3], 1)
+        love.graphics.print(name, cx, textY)
+        cx = cx + nameW
+      end
 
-function Modals.drawEmojiOverlay(emojiFont, emojiNative)
-  if kind ~= "bestiary" or not bestiaryRows then return end
-  love.graphics.setFont(emojiFont)
-  for _, row in ipairs(bestiaryRows) do
-    if row.found then
-      local slots = { row.slotA, row.slotB, row.slotR }
-      local glyphs = { row.glyphA, row.glyphB, row.glyphR }
-      local tints = { row.tintA, row.tintB, row.tintR }
-      for i, s in ipairs(slots) do
-        local cx = s.x + s.width * 0.5
-        local cy = s.y + s.height * 0.5
-        local scale = (s.height * 0.95) / emojiNative
-        local t = tints[i] or { 1, 1, 1 }
-        love.graphics.setColor(t[1], t[2], t[3], 1)
-        local w = emojiFont:getWidth(glyphs[i]) * scale
-        local h = emojiFont:getHeight() * scale
-        love.graphics.print(glyphs[i], cx - w * 0.5, cy - h * 0.5, 0, scale, scale)
+      local function drawHiddenCell(nameW)
+        love.graphics.setColor(0.30, 0.30, 0.38, 1)
+        love.graphics.rectangle("fill", cx, cy - slot * 0.5, slot, slot, 4, 4)
+        cx = cx + slot + 6
+        love.graphics.setFont(fonts.ui)
+        love.graphics.setColor(0.55, 0.55, 0.62, 1)
+        love.graphics.print("???", cx, textY)
+        cx = cx + nameW
+      end
+
+      local nameColor = { 0.88, 0.88, 0.94 }
+      if found then
+        drawCropCell(aCrop, r.a, nameColor, 96)
+      else
+        drawHiddenCell(96)
+      end
+
+      love.graphics.setFont(fonts.ui)
+      love.graphics.setColor(0.7, 0.7, 0.8, 1)
+      love.graphics.print("+", cx, textY); cx = cx + 14
+
+      if found then
+        drawCropCell(bCrop, r.b, nameColor, 96)
+      else
+        drawHiddenCell(96)
+      end
+
+      love.graphics.setColor(0.7, 0.7, 0.8, 1)
+      love.graphics.print("->", cx, textY); cx = cx + 24
+
+      if found then
+        drawCropCell(rCrop, r.result, { 1, 0.95, 0.55 }, 108)
+      else
+        drawHiddenCell(108)
+      end
+
+      if found then
+        love.graphics.setColor(0.65, 0.90, 0.65, 1)
+        love.graphics.print("x" .. count, cx, textY)
       end
     end
   end
+
+  love.graphics.setScissor()
+
+  if scrollMax > 0 then
+    local barX = listX + listW - 6
+    love.graphics.setColor(0.15, 0.15, 0.18, 1)
+    love.graphics.rectangle("fill", barX, listY, 5, listH, 2, 2)
+    local thumbH = math.max(20, listH * (listH / (listH + scrollMax)))
+    local thumbY = listY + (scroll / scrollMax) * (listH - thumbH)
+    love.graphics.setColor(0.55, 0.55, 0.65, 1)
+    love.graphics.rectangle("fill", barX, thumbY, 5, thumbH, 2, 2)
+  end
+
   love.graphics.setColor(1, 1, 1, 1)
+end
+
+local function drawConfirmButton(x, y, w, h, label, bg, border, onClick)
+  local hover = isHover(x, y, w, h)
+  local r, g, b = bg[1], bg[2], bg[3]
+  if hover then
+    r = math.min(1, r + 0.10)
+    g = math.min(1, g + 0.10)
+    b = math.min(1, b + 0.10)
+  end
+  love.graphics.setColor(r, g, b, 1)
+  love.graphics.rectangle("fill", x, y, w, h, 6, 6)
+  love.graphics.setColor(border[1], border[2], border[3], 1)
+  love.graphics.rectangle("line", x, y, w, h, 6, 6)
+  love.graphics.setFont(fonts.ui)
+  love.graphics.setColor(1, 1, 1, 1)
+  local lw = fonts.ui:getWidth(label)
+  local lh = fonts.ui:getHeight()
+  love.graphics.print(label, x + (w - lw) * 0.5, y + (h - lh) * 0.5)
+  hitBtn(x, y, w, h, onClick)
+end
+
+local function drawResetConfirm()
+  local W, H = 380, 170
+  local px = (1920 - W) * 0.5
+  local py = (1080 - H) * 0.5
+
+  love.graphics.setColor(0, 0, 0, 0.55)
+  love.graphics.rectangle("fill", 0, 0, 1920, 1080)
+  hitBtn(0, 0, 1920, 1080, close)
+
+  love.graphics.setColor(0.12, 0.12, 0.16, 1)
+  love.graphics.rectangle("fill", px, py, W, H, 8, 8)
+  love.graphics.setColor(0.6, 0.6, 0.7, 1)
+  love.graphics.rectangle("line", px, py, W, H, 8, 8)
+  hitBtn(px, py, W, H, function() end)
+
+  love.graphics.setColor(1, 0.95, 0.6, 1)
+  centerText(fonts.uiBig, "Reset save?", px + W * 0.5, py + 16)
+
+  love.graphics.setColor(0.85, 0.85, 0.9, 1)
+  centerText(fonts.ui, "All progress will be deleted.", px + W * 0.5, py + 56)
+
+  local btnW, btnH = 150, 40
+  local btnY = py + H - btnH - 16
+  drawConfirmButton(px + 16, btnY, btnW, btnH, "Yes, reset",
+    { 0.55, 0.28, 0.18 }, { 0.7, 0.5, 0.3 },
+    function()
+      require("farm.save").reset()
+      close()
+    end)
+  drawConfirmButton(px + W - btnW - 16, btnY, btnW, btnH, "Cancel",
+    { 0.22, 0.22, 0.28 }, { 0.55, 0.55, 0.65 },
+    close)
+end
+
+function Modals.draw()
+  buttons = {}
+  if State.openModal ~= lastModal then
+    scroll = 0
+    lastModal = State.openModal
+  end
+  if State.openModal == "bestiary" then
+    drawBestiary()
+  elseif State.openModal == "resetConfirm" then
+    drawResetConfirm()
+  end
+end
+
+function Modals.mousepressed(x, y, mbtn)
+  if not State.openModal then return false end
+  if mbtn ~= 1 then return true end
+  for i = #buttons, 1, -1 do
+    local b = buttons[i]
+    if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+      b.onClick()
+      return true
+    end
+  end
+  return true
+end
+
+function Modals.wheelmoved(_, dy)
+  if State.openModal ~= "bestiary" then return false end
+  scroll = math.max(0, math.min(scrollMax, scroll - dy * 36))
+  return true
 end
 
 return Modals

@@ -4,7 +4,6 @@ local Sim = require("farm.sim")
 local Genetics = require("farm.genetics")
 local Sounds = require("farm.sounds")
 local Save = require("farm.save")
-local FlexLove = require("flexlove.FlexLove")
 local Modals = require("farm.modals")
 
 local Farm = {}
@@ -325,7 +324,11 @@ function Farm.start()
   Sounds.init()
   State.init()
   Save.load()
-  FlexLove.init({ baseScale = { width = 1920, height = 1080 } })
+  Modals.setFonts({
+    ui = fontUI, uiBig = fontUIBig, uiSmall = fontUISmall,
+    emoji = fontEmoji, emojiBig = fontEmojiBig,
+    emojiNative = EMOJI_NATIVE,
+  })
 end
 
 function Farm.shutdown()
@@ -336,8 +339,6 @@ function Farm.update(dt)
   Sim.update(dt)
   State.tickPopups()
   rebuildHudButtons()
-  Modals.syncTo(State.openModal)
-  FlexLove.update(dt)
   autoSaveAccum = autoSaveAccum + dt
   if autoSaveAccum >= C.SAVE_INTERVAL then
     autoSaveAccum = 0
@@ -936,8 +937,7 @@ function Farm.draw()
   drawHud()
   drawCropTooltip()
   drawHudTooltip()
-  FlexLove.draw()
-  Modals.drawEmojiOverlay(fontEmoji, EMOJI_NATIVE)
+  Modals.draw()
 end
 
 local function pickHover(sx, sy)
@@ -1093,7 +1093,10 @@ local function handleMMB(tile)
 end
 
 function Farm.mousepressed(x, y, btn)
-  if State.openModal then return end
+  if State.openModal then
+    Modals.mousepressed(x, y, btn)
+    return
+  end
 
   if btn == 1 then
     for i = #hudButtons, 1, -1 do
@@ -1142,7 +1145,7 @@ end
 
 function Farm.wheelmoved(dx, dy)
   if State.openModal then
-    FlexLove.wheelmoved(dx, dy)
+    Modals.wheelmoved(dx, dy)
     return
   end
   local mx, my = love.mouse.getPosition()
@@ -1171,7 +1174,6 @@ function Farm.keypressed(k, s, r)
     elseif not State.openModal then State.openModal = "bestiary" end
     return
   end
-  FlexLove.keypressed(k, s, r)
 end
 
 function Farm.keyreleased() end
