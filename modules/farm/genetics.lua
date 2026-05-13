@@ -2,69 +2,68 @@ local C = require("farm.constants")
 
 local Genetics = {}
 
-local function pickAllele(pair)
-  return pair[love.math.random(1, 2)]
+local TIER_MAX = #C.TIER_NAMES
+
+local function pairKey(a, b)
+  if a <= b then return a .. "+" .. b end
+  return b .. "+" .. a
 end
 
-local function mutate(value, kind)
-  if kind == "yield" then
-    return math.max(1, math.floor(value * (0.8 + love.math.random() * 0.4)))
-  elseif kind == "growTime" then
-    return math.max(8, math.floor(value * (0.8 + love.math.random() * 0.4)))
-  elseif kind == "color" then
-    return love.math.random(1, #C.CROPS)
+local function pickColor(a, b)
+  local recipe = C.CROP_RECIPES[pairKey(a, b)]
+  if recipe and love.math.random() < recipe.chance then
+    return recipe.result
   end
-  return value
+  if love.math.random() < 0.5 then return a end
+  return b
+end
+
+local function rollImprove(currentTier)
+  if love.math.random() < 0.5 then
+    return math.min(TIER_MAX, currentTier + 1)
+  end
+  return currentTier
 end
 
 function Genetics.cloneGenome(g)
   return {
-    yield    = { g.yield[1],    g.yield[2] },
-    growTime = { g.growTime[1], g.growTime[2] },
-    color    = { g.color[1],    g.color[2] },
+    color = g.color,
+    yieldTier = g.yieldTier,
+    growTimeTier = g.growTimeTier,
   }
 end
 
-function Genetics.baseGenome(cropIndex, yield, growTime)
+function Genetics.baseGenome(cropIndex, yieldTier, growTimeTier)
   return {
-    yield    = { yield, yield },
-    growTime = { growTime, growTime },
-    color    = { cropIndex, cropIndex },
+    color = cropIndex,
+    yieldTier = yieldTier or 1,
+    growTimeTier = growTimeTier or 1,
   }
 end
 
 function Genetics.phenotype(g)
-  local y = (g.yield[1]    + g.yield[2])    * 0.5
-  local t = (g.growTime[1] + g.growTime[2]) * 0.5
-  local c = math.min(g.color[1], g.color[2])
+  local cropInfo = C.CROPS[g.color]
+  local mult = cropInfo.yieldMult or 1
   return {
-    yield     = math.floor(y),
-    growTime  = t,
-    cropIndex = c,
-    name      = C.CROPS[c].name,
-    emoji     = C.CROPS[c].emoji,
+    yieldTier    = g.yieldTier,
+    growTimeTier = g.growTimeTier,
+    yield        = math.floor(C.YIELD_TIER_VALUES[g.yieldTier] * mult),
+    growTime     = C.GROWTIME_TIER_VALUES[g.growTimeTier],
+    cropIndex    = g.color,
+    name         = cropInfo.name,
+    emoji        = cropInfo.emoji,
+    tint         = cropInfo.color or { 1, 1, 1 },
+    yieldLabel   = C.TIER_NAMES[g.yieldTier],
+    growLabel    = C.TIER_NAMES[g.growTimeTier],
   }
 end
 
 function Genetics.cross(parentA, parentB)
-  local child = {
-    yield    = { pickAllele(parentA.yield),    pickAllele(parentB.yield) },
-    growTime = { pickAllele(parentA.growTime), pickAllele(parentB.growTime) },
-    color    = { pickAllele(parentA.color),    pickAllele(parentB.color) },
+  return {
+    yieldTier    = rollImprove(math.max(parentA.yieldTier,    parentB.yieldTier)),
+    growTimeTier = rollImprove(math.max(parentA.growTimeTier, parentB.growTimeTier)),
+    color        = pickColor(parentA.color, parentB.color),
   }
-  if love.math.random() < C.MUTATION_RATE then
-    local slot = love.math.random(1, 2)
-    child.yield[slot] = mutate(child.yield[slot], "yield")
-  end
-  if love.math.random() < C.MUTATION_RATE then
-    local slot = love.math.random(1, 2)
-    child.growTime[slot] = mutate(child.growTime[slot], "growTime")
-  end
-  if love.math.random() < C.MUTATION_RATE then
-    local slot = love.math.random(1, 2)
-    child.color[slot] = mutate(child.color[slot], "color")
-  end
-  return child
 end
 
 return Genetics

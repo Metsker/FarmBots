@@ -25,13 +25,25 @@ end
 
 function State.init()
   State._nextSeedId = 1
-  State.money = 0
+  State.money = 100
+  State.sticks = 2
+  State.digToggle = false
   State.time  = 0
-  State.weedTimer = C.WEED_SPAWN_INTERVAL
-  State.mode = "plant"
+  State.weedTimer = C.WEED_SPAWN_MAX_INTERVAL
   State.hoverEdge = nil
   State.hoverTile = nil
-  State.selectedSeedId = 1
+  State.selectedSeedId = nil
+  State.popups = {}
+  State.unlockedRows = C.STARTING_ROWS
+  State.seedScroll = 0
+  State.fertInventory = {}
+  State.fertLevel = {}
+  for _, k in ipairs(C.FERT_KEYS) do
+    State.fertInventory[k] = 0
+    State.fertLevel[k] = 1
+  end
+  State.fertMode = nil
+  State.stickMode = false
 
   State.tiles = {}
   for y = 1, C.GRID_H do
@@ -42,19 +54,10 @@ function State.init()
   end
 
   State.seeds = {}
-  for _ = 1, 6 do
-    local g = Genetics.baseGenome(1, 10, 30)
-    State._nextSeedId = State._nextSeedId + 1
-    State.seeds[#State.seeds + 1] = {
-      id = State._nextSeedId, genome = g, pheno = Genetics.phenotype(g),
-      label = "Tomato",
-    }
-  end
 
   State._usedNames = {}
   State.robots = {
-    State.newRobot(C.GRID_W * 0.5,     C.GRID_H * 0.5, "Till"),
-    State.newRobot(C.GRID_W * 0.5 + 1, C.GRID_H * 0.5, "Water"),
+    State.newRobot(C.GRID_W * 0.5, C.GRID_H * 0.5, "Till"),
   }
 end
 
@@ -75,18 +78,55 @@ local function pickName()
   return pick
 end
 
+local function hsvToRgb(h, s, v)
+  local i = math.floor(h * 6)
+  local f = h * 6 - i
+  local p = v * (1 - s)
+  local q = v * (1 - f * s)
+  local tt = v * (1 - (1 - f) * s)
+  i = i % 6
+  if i == 0 then return v, tt, p end
+  if i == 1 then return q, v, p end
+  if i == 2 then return p, v, tt end
+  if i == 3 then return p, q, v end
+  if i == 4 then return tt, p, v end
+  return v, p, q
+end
+
 function State.newRobot(tx, ty, task)
+  local cr, cg, cb = hsvToRgb(love.math.random(), 0.85 + love.math.random() * 0.15, 0.95)
   return {
     name = pickName(),
     px = tx, py = ty,
     targetTx = tx, targetTy = ty,
-    task = task or "Idle",
+    task = task or "Till",
     state = "idle",
     workTimer = 0,
     workTile = nil,
     speed = C.ROBOT_SPEED,
     upgraded = false,
+    color = { cr, cg, cb },
+    queue = {},
+    activeTask = nil,
   }
+end
+
+function State.addPopup(x, y, text)
+  State.popups[#State.popups + 1] = {
+    x = x, y = y, text = text, startTime = State.time, life = 1.0,
+  }
+end
+
+function State.tickPopups()
+  local i = 1
+  while i <= #State.popups do
+    local p = State.popups[i]
+    if State.time - p.startTime >= p.life then
+      table.remove(State.popups, i)
+    else
+      i = i + 1
+    end
+  end
 end
 
 function State.nextSeedCost()
@@ -132,18 +172,127 @@ function State.removeSeed(id)
   return nil
 end
 
+function State.sellSeed(id)
+  for i, s in ipairs(State.seeds) do
+    if s.id == id then
+      local sellVal = math.max(1, math.floor(s.pheno.yield * 0.1))
+      State.money = State.money + sellVal
+      State.addPopup(C.HUD_X + 50, C.HUD_OY + 30, "+$" .. sellVal)
+      table.remove(State.seeds, i)
+      return sellVal
+    end
+  end
+  return 0
+end
+
 function State.selectedSeed()
-  if #State.seeds == 0 then return nil end
+  if not State.selectedSeedId then return nil end
   for _, s in ipairs(State.seeds) do
     if s.id == State.selectedSeedId then return s end
   end
-  State.selectedSeedId = State.seeds[1].id
-  return State.seeds[1]
+  return nil
 end
 
 function State.nextRobotCost()
   local n = #State.robots
   return math.floor(C.ROBOT_BASE_COST * (C.ROBOT_COST_EXP ^ (n - 1)))
+end
+
+function State.rowUnlockCost(y)
+  return C.ROW_UNLOCK_COSTS[y - C.STARTING_ROWS]
+end
+
+function State.fertDuration(key, level)
+  local def = C.FERTILIZERS[key]
+  level = level or State.fertLevel[key] or 1
+  return def.baseDuration + (level - 1) * C.FERT_DURATION_PER_LEVEL
+end
+
+function State.fertMagnitude(key, level)
+  local def = C.FERTILIZERS[key]
+  if not def.baseMagnitude then return nil end
+  level = level or State.fertLevel[key] or 1
+  local mag = def.baseMagnitude + (level - 1) * def.magStep
+  if def.magCap and mag > def.magCap then mag = def.magCap end
+  return mag
+end
+
+function State.fertUpgradeCost(key)
+  local lvl = State.fertLevel[key] or 1
+  return math.floor(C.FERT_UPGRADE_BASE_COST * (C.FERT_UPGRADE_COST_EXP ^ (lvl - 1)))
+end
+
+function State.buyFert(key)
+  local def = C.FERTILIZERS[key]
+  if not def then return false end
+  if State.money < def.buyCost then return false end
+  State.money = State.money - def.buyCost
+  State.fertInventory[key] = (State.fertInventory[key] or 0) + 1
+  return true
+end
+
+function State.upgradeFert(key)
+  local cost = State.fertUpgradeCost(key)
+  if State.money < cost then return false end
+  State.money = State.money - cost
+  State.fertLevel[key] = (State.fertLevel[key] or 1) + 1
+  return true
+end
+
+function State.applyFert(tile, key)
+  if not tile or not key then return false end
+  if (State.fertInventory[key] or 0) <= 0 then return false end
+  local dur = State.fertDuration(key)
+  tile.ferts = tile.ferts or {}
+  local now = State.time
+  local prev = tile.ferts[key]
+  local base = (prev and prev > now) and prev or now
+  tile.ferts[key] = base + dur
+  State.fertInventory[key] = State.fertInventory[key] - 1
+  return true
+end
+
+function State.tileHasFert(tile, key)
+  if not tile or not tile.ferts then return false end
+  local e = tile.ferts[key]
+  return e and e > State.time
+end
+
+function State.clearModes()
+  State.digToggle = false
+  State.fertMode = nil
+  State.stickMode = false
+  State.selectedSeedId = nil
+end
+
+function State.toggleSeed(id)
+  if State.selectedSeedId == id then State.selectedSeedId = nil
+  else State.clearModes(); State.selectedSeedId = id end
+end
+
+function State.toggleDig()
+  if State.digToggle then State.digToggle = false
+  else State.clearModes(); State.digToggle = true end
+end
+
+function State.toggleFert(key)
+  if State.fertMode == key then State.fertMode = nil
+  else State.clearModes(); State.fertMode = key end
+end
+
+function State.toggleStick()
+  if State.stickMode then State.stickMode = false
+  else State.clearModes(); State.stickMode = true end
+end
+
+function State.tryUnlockRow(y)
+  if y <= State.unlockedRows then return false end
+  if y ~= State.unlockedRows + 1 then return false end
+  local cost = State.rowUnlockCost(y)
+  if not cost or State.money < cost then return false end
+  State.money = State.money - cost
+  State.unlockedRows = y
+  return true
 end
 
 return State
