@@ -47,6 +47,7 @@ function State.init()
   State.stickMode = false
   State.restrictMode = false
   State.openDropdown = nil
+  State.openModal = nil
 
   State.tiles = {}
   for y = 1, C.GRID_H do
@@ -60,7 +61,7 @@ function State.init()
 
   State._usedNames = {}
   State.robots = {
-    State.newRobot(C.GRID_W * 0.5, C.GRID_H * 0.5, "Till"),
+    State.newRobot(C.GRID_W * 0.5, 1, "Till"),
   }
 end
 

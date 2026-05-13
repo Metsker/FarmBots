@@ -1,0 +1,226 @@
+local C = require("farm.constants")
+local State = require("farm.state")
+local Genetics = require("farm.genetics")
+
+local Save = {}
+
+local function serialize(v)
+  local t = type(v)
+  if t == "nil" then return "nil" end
+  if t == "boolean" then return tostring(v) end
+  if t == "number" then return tostring(v) end
+  if t == "string" then return string.format("%q", v) end
+  if t == "table" then
+    local parts = {}
+    local arrayLike = true
+    local idx = 1
+    for k in pairs(v) do
+      if k ~= idx then arrayLike = false; break end
+      idx = idx + 1
+    end
+    if arrayLike then
+      for _, val in ipairs(v) do
+        parts[#parts + 1] = serialize(val)
+      end
+    else
+      for k, val in pairs(v) do
+        local keyStr
+        if type(k) == "string" and k:match("^[%a_][%w_]*$") then
+          keyStr = k
+        else
+          keyStr = "[" .. serialize(k) .. "]"
+        end
+        parts[#parts + 1] = keyStr .. "=" .. serialize(val)
+      end
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+  end
+  return "nil"
+end
+
+local function snapshotTiles()
+  local out = {}
+  for y = 1, C.GRID_H do
+    out[y] = {}
+    for x = 1, C.GRID_W do
+      local t = State.tiles[y][x]
+      local rec = { s = t.state }
+      if t.weed then rec.w = true end
+      if t.restrict then rec.r = true end
+      if t.crop then
+        rec.c = {
+          g = t.crop.genome,
+          gr = t.crop.growth,
+          wa = t.crop.water,
+          h = t.crop.hybrid and true or nil,
+        }
+      end
+      if t.ferts then
+        local f = {}
+        local any = false
+        for k, e in pairs(t.ferts) do
+          if e and e > State.time then
+            f[k] = e - State.time
+            any = true
+          end
+        end
+        if any then rec.f = f end
+      end
+      out[y][x] = rec
+    end
+  end
+  return out
+end
+
+local function snapshotSeeds()
+  local out = {}
+  for _, s in ipairs(State.seeds) do
+    out[#out + 1] = { id = s.id, g = s.genome, l = s.label }
+  end
+  return out
+end
+
+local function snapshotRobots()
+  local out = {}
+  for _, r in ipairs(State.robots) do
+    local q = {}
+    for _, tile in ipairs(r.queue or {}) do
+      q[#q + 1] = { tile.x, tile.y }
+    end
+    out[#out + 1] = {
+      name = r.name,
+      px = r.px, py = r.py,
+      task = r.task,
+      level = r.level or 1,
+      speed = r.speed or C.ROBOT_SPEED,
+      color = r.color,
+      queue = q,
+    }
+  end
+  return out
+end
+
+function Save.save()
+  local data = {
+    money = State.money,
+    sticks = State.sticks,
+    time = State.time,
+    weedTimer = State.weedTimer,
+    unlockedRows = State.unlockedRows,
+    _nextSeedId = State._nextSeedId,
+    _usedNames = State._usedNames,
+    fertInventory = State.fertInventory,
+    fertLevel = State.fertLevel,
+    seeds = snapshotSeeds(),
+    robots = snapshotRobots(),
+    tiles = snapshotTiles(),
+  }
+  love.filesystem.write(C.SAVE_FILE, "return " .. serialize(data))
+end
+
+function Save.exists()
+  return love.filesystem.getInfo(C.SAVE_FILE) ~= nil
+end
+
+function Save.load()
+  if not Save.exists() then return false end
+  local chunk, err = love.filesystem.load(C.SAVE_FILE)
+  if not chunk then print("[save] load error: " .. tostring(err)); return false end
+  local ok, data = pcall(chunk)
+  if not ok or type(data) ~= "table" then print("[save] eval error"); return false end
+
+  State.money = data.money or 0
+  State.sticks = data.sticks or 0
+  State.time = data.time or 0
+  State.weedTimer = data.weedTimer or C.WEED_SPAWN_MAX_INTERVAL
+  State.unlockedRows = data.unlockedRows or C.STARTING_ROWS
+  State._nextSeedId = data._nextSeedId or 1
+  State._usedNames = data._usedNames or {}
+  State.fertInventory = data.fertInventory or {}
+  State.fertLevel = data.fertLevel or {}
+  for _, k in ipairs(C.FERT_KEYS) do
+    State.fertInventory[k] = State.fertInventory[k] or 0
+    State.fertLevel[k] = State.fertLevel[k] or 1
+  end
+
+  State.seeds = {}
+  for _, s in ipairs(data.seeds or {}) do
+    State.seeds[#State.seeds + 1] = {
+      id = s.id,
+      genome = s.g,
+      pheno = Genetics.phenotype(s.g),
+      label = s.l,
+    }
+  end
+
+  for y = 1, C.GRID_H do
+    for x = 1, C.GRID_W do
+      local t = State.tiles[y][x]
+      local rec = data.tiles and data.tiles[y] and data.tiles[y][x]
+      if rec then
+        t.state = rec.s or "wild"
+        t.weed = rec.w == true
+        t.restrict = rec.r == true
+        if rec.c then
+          t.crop = {
+            genome = rec.c.g,
+            pheno = Genetics.phenotype(rec.c.g),
+            growth = rec.c.gr or 0,
+            water = rec.c.wa or 1.0,
+            hybrid = rec.c.h == true,
+          }
+        else
+          t.crop = nil
+        end
+        if rec.f then
+          local ferts = {}
+          for k, remaining in pairs(rec.f) do
+            ferts[k] = State.time + remaining
+          end
+          t.ferts = ferts
+        else
+          t.ferts = nil
+        end
+      end
+    end
+  end
+
+  State.robots = {}
+  for _, rd in ipairs(data.robots or {}) do
+    local r = State.newRobot(rd.px, rd.py, rd.task)
+    r.name = rd.name or r.name
+    r.px = rd.px
+    r.py = rd.py
+    r.targetTx = rd.px
+    r.targetTy = rd.py
+    r.task = rd.task or "Till"
+    r.level = rd.level or 1
+    r.speed = rd.speed or C.ROBOT_SPEED
+    r.color = rd.color or r.color
+    r.queue = {}
+    for _, qc in ipairs(rd.queue or {}) do
+      local tile = State.tileAt(qc[1], qc[2])
+      if tile then r.queue[#r.queue + 1] = tile end
+    end
+    r.state = "idle"
+    r.idleTimer = 0
+    r.activeTask = nil
+    r.workTile = nil
+    r.workTimer = 0
+    State.robots[#State.robots + 1] = r
+  end
+
+  State._usedNames = State._usedNames or {}
+  for _, r in ipairs(State.robots) do
+    State._usedNames[r.name] = true
+  end
+
+  return true
+end
+
+function Save.reset()
+  if Save.exists() then love.filesystem.remove(C.SAVE_FILE) end
+  State.init()
+end
+
+return Save

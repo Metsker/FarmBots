@@ -3,6 +3,7 @@ local State = require("farm.state")
 local Sim = require("farm.sim")
 local Genetics = require("farm.genetics")
 local Sounds = require("farm.sounds")
+local Save = require("farm.save")
 
 local Farm = {}
 
@@ -62,6 +63,14 @@ local function rebuildHudButtons()
   hudBtn("mute", hx + hw - BTN_H, C.HUD_OY, BTN_H, BTN_H, "",
     function() Sounds.muted = not Sounds.muted end,
     { muteIcon = true, active = Sounds.muted })
+
+  hudBtn("reset", hx + hw - BTN_H * 2 - 6, C.HUD_OY, BTN_H, BTN_H, "",
+    function() State.openModal = "resetConfirm" end,
+    { resetIcon = true })
+
+  hudBtn("save", hx + hw - BTN_H * 3 - 12, C.HUD_OY, BTN_H, BTN_H, "",
+    function() Save.save() end,
+    { saveIcon = true, sound = "buy" })
 
   local actionBarY = C.HUD_OY + 80
   local actionCursor = hx
@@ -153,6 +162,21 @@ local function rebuildHudButtons()
     hudBtn("robot_speed_" .. i, cursorX, rowY, spW, BTN_H, speedLabel,
       function() State.upgradeRobot(r) end,
       { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "robotUp", robot = r } })
+    cursorX = cursorX + spW + BTN_GAP
+
+    local qCount = r.queue and #r.queue or 0
+    hudBtn("robot_clear_" .. i, cursorX, rowY, BTN_H, BTN_H, "",
+      function()
+        r.queue = {}
+        if r.activeTask then
+          r.activeTask = nil
+          r.workTile = nil
+          r.workTimer = 0
+          r.state = "idle"
+          r.idleTimer = 0
+        end
+      end,
+      { disabled = qCount <= 0, clearIcon = true })
     end
     ::continue_robot::
   end
@@ -195,7 +219,7 @@ local function rebuildHudButtons()
       function()
         if canBuyRobot then
           State.money = State.money - rcost
-          State.robots[#State.robots + 1] = State.newRobot(C.GRID_W * 0.5, C.GRID_H * 0.5, "Till")
+          State.robots[#State.robots + 1] = State.newRobot(C.GRID_W * 0.5, 1, "Till")
         end
       end,
       { disabled = not canBuyRobot, robotBuy = true, sound = "buy" })
@@ -282,18 +306,44 @@ local function rebuildHudButtons()
       popY = popY + BTN_H + 2
     end
   end
+
+  if State.openModal == "resetConfirm" then
+    local mw, mh = 320, 140
+    local mx = math.floor((1920 - mw) * 0.5)
+    local my = math.floor((1080 - mh) * 0.5)
+    local btnW2 = 120
+    local btnY = my + mh - BTN_H - 14
+    hudBtn("modal_yes", mx + 16, btnY, btnW2, BTN_H, "Yes, reset",
+      function() Save.reset(); State.openModal = nil end,
+      { modalItem = true, sellLabel = true })
+    hudBtn("modal_no", mx + mw - btnW2 - 16, btnY, btnW2, BTN_H, "Cancel",
+      function() State.openModal = nil end,
+      { modalItem = true })
+  end
 end
+
+local autoSaveAccum = 0
 
 function Farm.start()
   loadFonts()
   Sounds.init()
   State.init()
+  Save.load()
+end
+
+function Farm.shutdown()
+  Save.save()
 end
 
 function Farm.update(dt)
   Sim.update(dt)
   State.tickPopups()
   rebuildHudButtons()
+  autoSaveAccum = autoSaveAccum + dt
+  if autoSaveAccum >= C.SAVE_INTERVAL then
+    autoSaveAccum = 0
+    Save.save()
+  end
 end
 
 local function drawPopups()
@@ -656,7 +706,7 @@ local function drawHud()
 
   local mxh, myh = love.mouse.getPosition()
   for _, b in ipairs(hudButtons) do
-    local hover = (not b.opts.disabled)
+    local hover = (not b.opts.disabled) and (not b.opts.nameLabel)
       and mxh >= b.x and mxh <= b.x + b.w
       and myh >= b.y and myh <= b.y + b.h
     local br, bg, bb
@@ -747,6 +797,12 @@ local function drawHud()
       love.graphics.print(b.label, b.x + 44, b.y + 10)
     elseif b.opts.muteIcon then
       drawCenteredEmoji(fontEmojiBig, Sounds.muted and "🔇" or "🔊", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.resetIcon then
+      drawCenteredEmoji(fontEmojiBig, "🗑", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.saveIcon then
+      drawCenteredEmoji(fontEmojiBig, "💾", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.clearIcon then
+      drawCenteredEmoji(fontEmojiBig, "🔄", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.actionToggle then
       if b.opts.tint then
         drawCenteredEmojiTinted(fontEmojiBig, b.opts.actionToggle, b.x + b.w * 0.5, b.y + b.h * 0.5, 32 / EMOJI_NATIVE, b.opts.tint)
@@ -799,6 +855,49 @@ local function drawHud()
   love.graphics.print("LMB: harvest, plant selected seed, or use active action.", C.HUD_X, helpY)
   love.graphics.print("RMB: cancel mode.   MMB: queue nearest robot for tile.", C.HUD_X, helpY + 16)
   love.graphics.print("Action bar: stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
+
+  if State.openModal == "resetConfirm" then
+    love.graphics.setColor(0, 0, 0, 0.55)
+    love.graphics.rectangle("fill", 0, 0, 1920, 1080)
+    local mw, mh = 360, 150
+    local mx = math.floor((1920 - mw) * 0.5)
+    local my = math.floor((1080 - mh) * 0.5)
+    love.graphics.setColor(0.12, 0.12, 0.16, 1)
+    love.graphics.rectangle("fill", mx, my, mw, mh, 8, 8)
+    love.graphics.setColor(0.6, 0.6, 0.7, 1)
+    love.graphics.rectangle("line", mx, my, mw, mh, 8, 8)
+    love.graphics.setFont(fontUIBig)
+    love.graphics.setColor(1, 0.95, 0.6, 1)
+    love.graphics.printf("Reset save?", mx, my + 18, mw, "center")
+    love.graphics.setFont(fontUI)
+    love.graphics.setColor(0.8, 0.8, 0.85, 1)
+    love.graphics.printf("All progress will be deleted.", mx, my + 56, mw, "center")
+    for _, b in ipairs(hudButtons) do
+      if b.opts.modalItem then
+        local mxp, myp = love.mouse.getPosition()
+        local hover = mxp >= b.x and mxp <= b.x + b.w and myp >= b.y and myp <= b.y + b.h
+        local br, bg, bb
+        if b.opts.sellLabel then
+          br, bg, bb = 0.55, 0.28, 0.18
+        else
+          br, bg, bb = 0.22, 0.22, 0.28
+        end
+        if hover then
+          br = math.min(1, br + 0.12)
+          bg = math.min(1, bg + 0.12)
+          bb = math.min(1, bb + 0.12)
+        end
+        love.graphics.setColor(br, bg, bb, 1)
+        love.graphics.rectangle("fill", b.x, b.y, b.w, b.h, 6, 6)
+        love.graphics.setColor(0.6, 0.6, 0.7, 1)
+        love.graphics.rectangle("line", b.x, b.y, b.w, b.h, 6, 6)
+        love.graphics.setFont(fontUI)
+        love.graphics.setColor(1, 1, 1, 1)
+        local lw = fontUI:getWidth(b.label)
+        love.graphics.print(b.label, b.x + (b.w - lw) * 0.5, b.y + 10)
+      end
+    end
+  end
 end
 
 local function drawHudTooltip()
@@ -1033,6 +1132,20 @@ local function handleMMB(tile)
 end
 
 function Farm.mousepressed(x, y, btn)
+  if State.openModal then
+    if btn == 1 then
+      for i = #hudButtons, 1, -1 do
+        local b = hudButtons[i]
+        if b.opts.modalItem and x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+          Sounds.play(b.opts.sound or "click")
+          b.onClick()
+          return
+        end
+      end
+    end
+    return
+  end
+
   if btn == 1 then
     for i = #hudButtons, 1, -1 do
       local b = hudButtons[i]

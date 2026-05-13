@@ -35,3 +35,4 @@ function love.keypressed(k,s,r)
   Farm.keypressed(k,s,r)
 end
 function love.keyreleased(k)          Farm.keyreleased(k) end
+function love.quit()                  Farm.shutdown() end

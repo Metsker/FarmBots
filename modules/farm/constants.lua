@@ -160,4 +160,7 @@ return {
   FERT_UPGRADE_BASE_COST = 100,
   FERT_UPGRADE_COST_EXP = 2.0,
   FERT_BUY_COST_EXP = 1.6,
+
+  SAVE_FILE = "save.lua",
+  SAVE_INTERVAL = 60,
 }
