@@ -5,14 +5,18 @@ return {
   GRID_OX = 32,
   GRID_OY = 12,
 
+  ACTION_BTN_W = 56,
+  ACTION_BTN_H = 56,
+  ACTION_BTN_GAP = 6,
+
   STARTING_ROWS = 3,
-  ROW_UNLOCK_COSTS = { 200, 350, 600, 1000, 1600, 2400, 3500, 5000 },
+  ROW_UNLOCK_COSTS = { 200, 500, 1200, 2800, 6000, 12000, 24000, 50000 },
 
   HUD_X = 1444,
   HUD_W = 460,
   HUD_OY = 32,
 
-  TASKS = { "Till", "Water", "Weed" },
+  TASKS = { "Till", "Water", "Weed", "Replant" },
 
   CROPS = {
     { name="Tomato",     emoji="🍅", color={1.00, 0.30, 0.22}, buyCost = 5,  yieldMult = 1 },
@@ -58,13 +62,17 @@ return {
     ["5+6"]  = { result = 8,  chance = 0.20 },
   },
 
-  WORK_TIME = { Till=2.0, Water=1.5, Weed=1.5 },
+  WORK_TIME = { Till=2.0, Water=1.5, Weed=1.5, Replant=1.0 },
 
   ROBOT_SPEED       = 2,
   ROBOT_SPEED_UP    = 3,
+  ROBOT_SPEED_PER_LEVEL = 0.25,
+  ROBOT_WORK_MULT_PER_LEVEL = 0.125,
   ROBOT_UPGRADE_COST = 100,
+  ROBOT_UPGRADE_BASE_COST = 100,
+  ROBOT_UPGRADE_COST_EXP = 2.0,
   ROBOT_BASE_COST   = 50,
-  ROBOT_COST_EXP    = 1.9,
+  ROBOT_COST_EXP    = 2.4,
   ROBOT_CAP         = 12,
 
   SEED_BASE_COST = 50,
@@ -97,13 +105,15 @@ return {
     Till    = "🚜",
     Water   = "💧",
     Weed    = "🪓",
+    Replant = "🌾",
   },
 
   TASK_TINT = {
-    Idle  = { 0.7, 0.7, 0.9 },
-    Till  = { 1.00, 0.65, 0.15 },
-    Water = { 0.30, 0.65, 1.00 },
-    Weed  = { 0.70, 0.50, 0.25 },
+    Idle    = { 0.7, 0.7, 0.9 },
+    Till    = { 1.00, 0.65, 0.15 },
+    Water   = { 0.30, 0.65, 1.00 },
+    Weed    = { 0.70, 0.50, 0.25 },
+    Replant = { 1.00, 0.85, 0.30 },
   },
 
   WEED_TINT = { 0.40, 0.85, 0.35 },
@@ -120,7 +130,7 @@ return {
       emoji = "🛡",
       tint  = { 0.6, 0.85, 1.0 },
       buyCost = 20,
-      baseDuration = 300,
+      baseDuration = 60,
       baseMagnitude = nil,
       magStep = 0,
       magCap = nil,
@@ -130,7 +140,7 @@ return {
       emoji = "⚡",
       tint  = { 1.0, 0.95, 0.4 },
       buyCost = 40,
-      baseDuration = 300,
+      baseDuration = 60,
       baseMagnitude = 1.5,
       magStep = 0.1,
       magCap = 5.0,
@@ -140,7 +150,7 @@ return {
       emoji = "💦",
       tint  = { 0.4, 0.7, 1.0 },
       buyCost = 30,
-      baseDuration = 300,
+      baseDuration = 60,
       baseMagnitude = nil,
       magStep = 0,
       magCap = nil,
@@ -148,5 +158,6 @@ return {
   },
   FERT_DURATION_PER_LEVEL = 60,
   FERT_UPGRADE_BASE_COST = 100,
-  FERT_UPGRADE_COST_EXP = 1.5,
+  FERT_UPGRADE_COST_EXP = 2.0,
+  FERT_BUY_COST_EXP = 1.6,
 }

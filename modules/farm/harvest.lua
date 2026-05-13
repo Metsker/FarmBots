@@ -9,6 +9,7 @@ function Harvest.harvestTile(tile)
   State.money = State.money + gain
   local cx, cy = State.tileCenter(tile.x, tile.y)
   State.addPopup(cx, cy, "+$" .. gain)
+  State.addSeed(Genetics.cloneGenome(tile.crop.genome), tile.crop.pheno.name)
   tile.crop = nil
   tile.state = "tilled"
   return true

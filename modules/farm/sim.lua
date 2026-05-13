@@ -28,6 +28,8 @@ local function findRobotJob(robot)
         match = (t.state == "growing" and t.crop and t.crop.water < C.WATER_REFILL_GATE)
       elseif task == "Weed" then
         match = t.weed
+      elseif task == "Replant" then
+        match = (t.state == "ripe" and not t.restrict)
       end
       if match and not claimed[t] then
         local dx, dy = x - robot.px, y - robot.py
@@ -66,6 +68,7 @@ local function neededTaskFor(tile)
   if tile.weed then return "Weed" end
   if tile.state == "wild" then return "Till" end
   if tile.state == "growing" and tile.crop and tile.crop.water < C.WATER_REFILL_GATE then return "Water" end
+  if tile.state == "ripe" and not tile.restrict then return "Replant" end
   return nil
 end
 
@@ -82,6 +85,21 @@ local function performWork(robot, tile)
     end
   elseif task == "Weed" then
     tile.weed = false
+  elseif task == "Replant" then
+    if tile.state == "ripe" and tile.crop then
+      local clonedGenome = Genetics.cloneGenome(tile.crop.genome)
+      local pheno = tile.crop.pheno
+      State.money = State.money + pheno.yield
+      local cx, cy = State.tileCenter(tile.x, tile.y)
+      State.addPopup(cx, cy, "+$" .. pheno.yield)
+      tile.crop = {
+        genome = clonedGenome,
+        pheno  = Genetics.phenotype(clonedGenome),
+        growth = 0,
+        water  = 1.0,
+      }
+      tile.state = "growing"
+    end
   end
 end
 
@@ -134,7 +152,8 @@ local function updateRobot(robot, dt)
       robot.py = robot.targetTy
       if robot.workTile then
         robot.state = "working"
-        robot.workTimer = C.WORK_TIME[robot.activeTask or robot.task] or 1.0
+        local workMult = 1 + ((robot.level or 1) - 1) * C.ROBOT_WORK_MULT_PER_LEVEL
+        robot.workTimer = (C.WORK_TIME[robot.activeTask or robot.task] or 1.0) / workMult
       else
         robot.state = "idle"
         robot.idleTimer = 1.0
@@ -166,7 +185,7 @@ local NEIGHBOR_OFFSETS = { {1,0}, {-1,0}, {0,1}, {0,-1} }
 local function tryBreedAtRipen(ripeTile)
   for _, off in ipairs(NEIGHBOR_OFFSETS) do
     local stick = State.tileAt(ripeTile.x + off[1], ripeTile.y + off[2])
-    if stick and stick.state == "stick" then
+    if stick and stick.state == "stick" and not stick.weed then
       local mates = {}
       for _, off2 in ipairs(NEIGHBOR_OFFSETS) do
         local m = State.tileAt(stick.x + off2[1], stick.y + off2[2])

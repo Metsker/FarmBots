@@ -36,6 +36,7 @@ function State.init()
   State.popups = {}
   State.unlockedRows = C.STARTING_ROWS
   State.seedScroll = 0
+  State.robotScroll = 0
   State.fertInventory = {}
   State.fertLevel = {}
   for _, k in ipairs(C.FERT_KEYS) do
@@ -44,6 +45,8 @@ function State.init()
   end
   State.fertMode = nil
   State.stickMode = false
+  State.restrictMode = false
+  State.openDropdown = nil
 
   State.tiles = {}
   for y = 1, C.GRID_H do
@@ -104,11 +107,25 @@ function State.newRobot(tx, ty, task)
     workTimer = 0,
     workTile = nil,
     speed = C.ROBOT_SPEED,
-    upgraded = false,
+    level = 1,
     color = { cr, cg, cb },
     queue = {},
     activeTask = nil,
   }
+end
+
+function State.robotUpgradeCost(robot)
+  local lvl = robot.level or 1
+  return math.floor(C.ROBOT_UPGRADE_BASE_COST * (C.ROBOT_UPGRADE_COST_EXP ^ (lvl - 1)))
+end
+
+function State.upgradeRobot(robot)
+  local cost = State.robotUpgradeCost(robot)
+  if State.money < cost then return false end
+  State.money = State.money - cost
+  robot.level = (robot.level or 1) + 1
+  robot.speed = C.ROBOT_SPEED + (robot.level - 1) * C.ROBOT_SPEED_PER_LEVEL
+  return true
 end
 
 function State.addPopup(x, y, text)
@@ -222,11 +239,18 @@ function State.fertUpgradeCost(key)
   return math.floor(C.FERT_UPGRADE_BASE_COST * (C.FERT_UPGRADE_COST_EXP ^ (lvl - 1)))
 end
 
+function State.fertBuyCost(key)
+  local def = C.FERTILIZERS[key]
+  local lvl = State.fertLevel[key] or 1
+  return math.floor(def.buyCost * (C.FERT_BUY_COST_EXP ^ (lvl - 1)))
+end
+
 function State.buyFert(key)
   local def = C.FERTILIZERS[key]
   if not def then return false end
-  if State.money < def.buyCost then return false end
-  State.money = State.money - def.buyCost
+  local cost = State.fertBuyCost(key)
+  if State.money < cost then return false end
+  State.money = State.money - cost
   State.fertInventory[key] = (State.fertInventory[key] or 0) + 1
   return true
 end
@@ -262,7 +286,13 @@ function State.clearModes()
   State.digToggle = false
   State.fertMode = nil
   State.stickMode = false
+  State.restrictMode = false
   State.selectedSeedId = nil
+end
+
+function State.toggleRestrict()
+  if State.restrictMode then State.restrictMode = false
+  else State.clearModes(); State.restrictMode = true end
 end
 
 function State.toggleSeed(id)

@@ -29,6 +29,8 @@ end
 local hudButtons = {}
 local seedViewport = { x = 0, y = 0, w = 0, h = 0 }
 local seedScrollMax = 0
+local robotViewport = { x = 0, y = 0, w = 0, h = 0 }
+local robotScrollMax = 0
 
 local function hudBtn(id, x, y, w, h, label, onClick, opts)
   hudButtons[#hudButtons + 1] = {
@@ -56,159 +58,109 @@ local function rebuildHudButtons()
   hudButtons = {}
   local hx = C.HUD_X
   local hw = C.HUD_W
-  local hy = C.HUD_OY + 90
 
   hudBtn("mute", hx + hw - BTN_H, C.HUD_OY, BTN_H, BTN_H, "",
     function() Sounds.muted = not Sounds.muted end,
     { muteIcon = true, active = Sounds.muted })
 
+  local actionBarY = C.HUD_OY + 80
+  local actionCursor = hx
+  local function actionBtn(id, emoji, onClick, opts)
+    opts = opts or {}
+    opts.actionToggle = emoji
+    hudBtn(id, actionCursor, actionBarY, C.ACTION_BTN_W, C.ACTION_BTN_H, "", onClick, opts)
+    actionCursor = actionCursor + C.ACTION_BTN_W + C.ACTION_BTN_GAP
+  end
+
+  actionBtn("act_stick", C.STICK_EMOJI,
+    function() if State.sticks > 0 then State.toggleStick() end end,
+    { active = State.stickMode, disabled = State.sticks <= 0, count = State.sticks })
+
+  for _, key in ipairs(C.FERT_KEYS) do
+    local def = C.FERTILIZERS[key]
+    local n = State.fertInventory[key] or 0
+    actionBtn("act_" .. key, def.emoji,
+      function() if n > 0 then State.toggleFert(key) end end,
+      { active = (State.fertMode == key), disabled = n <= 0, count = n, tint = def.tint })
+  end
+
+  actionBtn("act_shovel", "🪏",
+    function() State.toggleDig() end,
+    { active = State.digToggle })
+
+  actionBtn("act_restrict", "🚫",
+    function() State.toggleRestrict() end,
+    { active = State.restrictMode })
+
+  local helpY = 1080 - 60
+  local rowH56 = 56
+  local fertRows = #C.FERT_KEYS
+  local fertShopH = fertRows * rowH56
+  local fertShopTop = helpY - 8 - fertShopH
+  local cropsY = fertShopTop - rowH56
+  local buyY = cropsY - rowH56
+
+  local robotsTop = actionBarY + C.ACTION_BTN_H + 14
   local robotRowH = 50
+  local availableH = (buyY - 14) - robotsTop
+  local robotViewportH = math.max(60, math.floor((availableH - 14) / 2))
+  robotViewport = { x = hx, y = robotsTop, w = hw - 60, h = robotViewportH }
+  local robotsContentH = #State.robots * robotRowH
+  robotScrollMax = math.max(0, robotsContentH - robotViewportH)
+  if State.robotScroll > robotScrollMax then State.robotScroll = robotScrollMax end
+  if State.robotScroll < 0 then State.robotScroll = 0 end
+
+  local pendingPopups = {}
+  local nameMaxW = 0
+  for _, n in ipairs(C.ROBOT_NAMES) do
+    local w = btnW(n, { nameLabel = true })
+    if w > nameMaxW then nameMaxW = w end
+  end
   for i, r in ipairs(State.robots) do
-    local rowY = hy + (i - 1) * robotRowH
+    local rowY = robotsTop + (i - 1) * robotRowH - State.robotScroll
+    if rowY < robotsTop or rowY + BTN_H > robotsTop + robotViewportH then
+      goto continue_robot
+    end
+    do
     local cursorX = hx
 
-    local nameW = btnW(r.name, { nameLabel = true })
-    hudBtn("robot_name_" .. i, cursorX, rowY, nameW, BTN_H, r.name, function() end,
+    hudBtn("robot_name_" .. i, cursorX, rowY, nameMaxW, BTN_H, r.name, function() end,
       { selected = true, nameLabel = true })
-    cursorX = cursorX + nameW + BTN_GAP
+    cursorX = cursorX + nameMaxW + BTN_GAP
 
-    for ti, taskName in ipairs(C.TASKS) do
-      local cw = btnW(taskName)
-      hudBtn("robot_t_" .. i .. "_" .. ti, cursorX, rowY, cw, BTN_H,
-        taskName,
-        function()
-          r.task = taskName
-          r.state = "idle"
-          r.idleTimer = 0
-        end,
-        { active = (r.task == taskName) })
-      cursorX = cursorX + cw + BTN_GAP
+    local taskLabel = r.task or "Idle"
+    local maxTaskW = 0
+    for _, tn in ipairs(C.TASKS) do
+      local w = btnW(tn)
+      if w > maxTaskW then maxTaskW = w end
     end
+    local tkW = math.max(maxTaskW, btnW(taskLabel))
+    local ddKey = "task_" .. i
+    hudBtn("robot_task_" .. i, cursorX, rowY, tkW, BTN_H, taskLabel,
+      function()
+        if State.openDropdown == ddKey then State.openDropdown = nil
+        else State.openDropdown = ddKey end
+      end,
+      { active = (State.openDropdown == ddKey), dropdownTrigger = ddKey })
+    if State.openDropdown == ddKey then
+      pendingPopups[#pendingPopups + 1] = { robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tkW }
+    end
+    cursorX = cursorX + tkW + BTN_GAP
 
-    local speedLabel = r.upgraded and "Fast" or ("Speed $" .. C.ROBOT_UPGRADE_COST)
+    local upCost = State.robotUpgradeCost(r)
+    local speedLabel = "Lv" .. (r.level or 1) .. " $" .. upCost
     local spW = btnW(speedLabel)
     hudBtn("robot_speed_" .. i, cursorX, rowY, spW, BTN_H, speedLabel,
-      function()
-        if not r.upgraded and State.money >= C.ROBOT_UPGRADE_COST then
-          State.money = State.money - C.ROBOT_UPGRADE_COST
-          r.speed = C.ROBOT_SPEED_UP
-          r.upgraded = true
-        end
-      end,
-      { disabled = r.upgraded, sound = "buy" })
+      function() State.upgradeRobot(r) end,
+      { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "robotUp", robot = r } })
+    end
+    ::continue_robot::
   end
 
-  local buyY = hy + (#State.robots) * 50 + 12
-  local cursorX = hx
-
-  local rcost = State.nextRobotCost()
-  local canBuyRobot = State.money >= rcost and #State.robots < C.ROBOT_CAP
-  local rLabel = "Buy $" .. rcost
-  local rW = btnW(rLabel, { robotBuy = true })
-  hudBtn("buy_robot", cursorX, buyY, rW, BTN_H, rLabel,
-    function()
-      if canBuyRobot then
-        State.money = State.money - rcost
-        State.robots[#State.robots + 1] = State.newRobot(C.GRID_W * 0.5, C.GRID_H * 0.5, "Till")
-      end
-    end,
-    { disabled = not canBuyRobot, robotBuy = true, sound = "buy" })
-  cursorX = cursorX + rW + BTN_GAP
-
-  local tCost = C.CROPS[1].buyCost
-  local canBuyTomato = State.money >= tCost
-  local tLabel = "Buy $" .. tCost
-  local tW = btnW(tLabel, { seedBuy = 1 })
-  hudBtn("buy_tomato", cursorX, buyY, tW, BTN_H, tLabel,
-    function()
-      if canBuyTomato then
-        State.money = State.money - tCost
-        local g = require("farm.genetics").baseGenome(1, 1, 1)
-        State.addSeed(g, "Tomato")
-      end
-    end,
-    { disabled = not canBuyTomato, seedBuy = 1, sound = "buy" })
-  cursorX = cursorX + tW + BTN_GAP
-
-  local cCost = C.CROPS[2].buyCost
-  local canBuyCarrot = State.money >= cCost
-  local cLabel = "Buy $" .. cCost
-  local cW = btnW(cLabel, { seedBuy = 2 })
-  hudBtn("buy_carrot", cursorX, buyY, cW, BTN_H, cLabel,
-    function()
-      if canBuyCarrot then
-        State.money = State.money - cCost
-        local g = require("farm.genetics").baseGenome(2, 1, 1)
-        State.addSeed(g, "Carrot")
-      end
-    end,
-    { disabled = not canBuyCarrot, seedBuy = 2, sound = "buy" })
-
-  local stickRowY = buyY + 56
-  cursorX = hx
-  local stickApplyLabel = "x" .. State.sticks
-  local saW = btnW(stickApplyLabel, { stickApply = true })
-  hudBtn("stick_apply", cursorX, stickRowY, saW, BTN_H, stickApplyLabel,
-    function()
-      if State.sticks > 0 then State.toggleStick() end
-    end,
-    { stickApply = true, active = State.stickMode, disabled = State.sticks <= 0 })
-  cursorX = cursorX + saW + BTN_GAP
-
-  local canBuyStick = State.money >= C.STICK_COST
-  local sBuyLabel = "Buy $" .. C.STICK_COST
-  local sBuyW = btnW(sBuyLabel, { stickBuy = true })
-  hudBtn("buy_stick", cursorX, stickRowY, sBuyW, BTN_H, sBuyLabel,
-    function()
-      if canBuyStick then
-        State.money = State.money - C.STICK_COST
-        State.sticks = State.sticks + 1
-      end
-    end,
-    { disabled = not canBuyStick, stickBuy = true, sound = "buy" })
-
-  local fertRowsStartY = stickRowY + 56
-  for i, key in ipairs(C.FERT_KEYS) do
-    local def = C.FERTILIZERS[key]
-    local rowY = fertRowsStartY + (i - 1) * 56
-    local cur = hx
-    local count = State.fertInventory[key] or 0
-
-    local applyLabel = "x" .. count
-    local applyW = btnW(applyLabel, { fertApply = key })
-    hudBtn("fert_apply_" .. key, cur, rowY, applyW, BTN_H, applyLabel,
-      function()
-        if count > 0 then State.toggleFert(key) end
-      end,
-      { fertApply = key, active = (State.fertMode == key), disabled = count <= 0 })
-    cur = cur + applyW + BTN_GAP
-
-    local buyLabel = "Buy $" .. def.buyCost
-    local buyW = btnW(buyLabel, { fertBuy = key })
-    hudBtn("fert_buy_" .. key, cur, rowY, buyW, BTN_H, buyLabel,
-      function() State.buyFert(key) end,
-      { fertBuy = key, disabled = State.money < def.buyCost, sound = "buy" })
-    cur = cur + buyW + BTN_GAP
-
-    local upCost = State.fertUpgradeCost(key)
-    local lvl = State.fertLevel[key] or 1
-    local upLabel = "Lv" .. lvl .. " $" .. upCost
-    local upW = btnW(upLabel)
-    hudBtn("fert_up_" .. key, cur, rowY, upW, BTN_H, upLabel,
-      function() State.upgradeFert(key) end,
-      { disabled = State.money < upCost, sound = "buy" })
-  end
-
-  local digRowY = fertRowsStartY + #C.FERT_KEYS * 56
-  local digW = BTN_H + 4
-  hudBtn("mode_dig", hx, digRowY, digW, BTN_H, "",
-    function() State.toggleDig() end,
-    { active = State.digToggle, digIcon = true })
-
-  local seedHeaderY = digRowY + 56
-  local seedY = seedHeaderY + 30
-  local viewportH = math.max(36, 1080 - 70 - seedY)
-  seedViewport = { x = hx, y = seedY, w = hw - 60, h = viewportH }
+  local seedTop = robotsTop + robotViewportH + 14
+  local seedBottomLimit = buyY - 14
+  local viewportH = math.max(60, seedBottomLimit - seedTop)
+  seedViewport = { x = hx, y = seedTop, w = hw - 60, h = viewportH }
   local rowH = 36
   local contentH = #State.seeds * rowH
   local scrollMax = math.max(0, contentH - viewportH)
@@ -219,8 +171,8 @@ local function rebuildHudButtons()
   local selBtnW = (hw - 60) - sellBtnW - 4
   for i = 1, #State.seeds do
     local s = State.seeds[i]
-    local rowY = seedY + (i - 1) * rowH - State.seedScroll
-    if rowY >= seedY and rowY + 32 <= seedY + viewportH then
+    local rowY = seedTop + (i - 1) * rowH - State.seedScroll
+    if rowY >= seedTop and rowY + 32 <= seedTop + viewportH then
       hudBtn("seed_" .. s.id, hx, rowY, selBtnW, 32,
         string.format("Yield=%s   Time=%s",
           s.pheno.yieldLabel, s.pheno.growLabel),
@@ -231,6 +183,103 @@ local function rebuildHudButtons()
         "Sell $" .. sellVal,
         function() State.sellSeed(s.id) end,
         { sellLabel = true, sound = "sell" })
+    end
+  end
+
+  do
+    local rcost = State.nextRobotCost()
+    local canBuyRobot = State.money >= rcost and #State.robots < C.ROBOT_CAP
+    local rLabel = "Buy $" .. rcost
+    local rW = btnW(rLabel, { robotBuy = true })
+    hudBtn("buy_robot", hx, buyY, rW, BTN_H, rLabel,
+      function()
+        if canBuyRobot then
+          State.money = State.money - rcost
+          State.robots[#State.robots + 1] = State.newRobot(C.GRID_W * 0.5, C.GRID_H * 0.5, "Till")
+        end
+      end,
+      { disabled = not canBuyRobot, robotBuy = true, sound = "buy" })
+  end
+
+  do
+    local cursorX = hx
+    local canBuyStick = State.money >= C.STICK_COST
+    local sBuyLabel = "Buy $" .. C.STICK_COST
+    local sBuyW = btnW(sBuyLabel, { stickBuy = true })
+    hudBtn("buy_stick", cursorX, cropsY, sBuyW, BTN_H, sBuyLabel,
+      function()
+        if canBuyStick then
+          State.money = State.money - C.STICK_COST
+          State.sticks = State.sticks + 1
+        end
+      end,
+      { disabled = not canBuyStick, stickBuy = true, sound = "buy" })
+    cursorX = cursorX + sBuyW + BTN_GAP
+
+    local tCost = C.CROPS[1].buyCost
+    local canBuyTomato = State.money >= tCost
+    local tLabel = "Buy $" .. tCost
+    local tW = btnW(tLabel, { seedBuy = 1 })
+    hudBtn("buy_tomato", cursorX, cropsY, tW, BTN_H, tLabel,
+      function()
+        if canBuyTomato then
+          State.money = State.money - tCost
+          local g = require("farm.genetics").baseGenome(1, 1, 1)
+          State.addSeed(g, "Tomato")
+        end
+      end,
+      { disabled = not canBuyTomato, seedBuy = 1, sound = "buy" })
+    cursorX = cursorX + tW + BTN_GAP
+
+    local cCost = C.CROPS[2].buyCost
+    local canBuyCarrot = State.money >= cCost
+    local cLabel = "Buy $" .. cCost
+    local cW = btnW(cLabel, { seedBuy = 2 })
+    hudBtn("buy_carrot", cursorX, cropsY, cW, BTN_H, cLabel,
+      function()
+        if canBuyCarrot then
+          State.money = State.money - cCost
+          local g = require("farm.genetics").baseGenome(2, 1, 1)
+          State.addSeed(g, "Carrot")
+        end
+      end,
+      { disabled = not canBuyCarrot, seedBuy = 2, sound = "buy" })
+  end
+
+  for i, key in ipairs(C.FERT_KEYS) do
+    local def = C.FERTILIZERS[key]
+    local rowY = fertShopTop + (i - 1) * rowH56
+    local cur = hx
+
+    local bcost = State.fertBuyCost(key)
+    local buyLabel = "Buy $" .. bcost
+    local buyW = btnW(buyLabel, { fertBuy = key })
+    hudBtn("fert_buy_" .. key, cur, rowY, buyW, BTN_H, buyLabel,
+      function() State.buyFert(key) end,
+      { fertBuy = key, disabled = State.money < bcost, sound = "buy" })
+    cur = cur + buyW + BTN_GAP
+
+    local upCost = State.fertUpgradeCost(key)
+    local lvl = State.fertLevel[key] or 1
+    local upLabel = "Lv" .. lvl .. " $" .. upCost
+    local upW = btnW(upLabel)
+    hudBtn("fert_up_" .. key, cur, rowY, upW, BTN_H, upLabel,
+      function() State.upgradeFert(key) end,
+      { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "fertUp", key = key } })
+  end
+
+  for _, pop in ipairs(pendingPopups) do
+    local popY = pop.y
+    for ti, taskName in ipairs(C.TASKS) do
+      hudBtn("task_pop_" .. pop.robotIdx .. "_" .. ti, pop.x, popY, pop.w, BTN_H, taskName,
+        function()
+          pop.robotRef.task = taskName
+          pop.robotRef.state = "idle"
+          pop.robotRef.idleTimer = 0
+          State.openDropdown = nil
+        end,
+        { active = (pop.robotRef.task == taskName), popupItem = true })
+      popY = popY + BTN_H + 2
     end
   end
 end
@@ -304,8 +353,9 @@ local function drawGrid()
       local t = State.tiles[y][x]
       local sx, sy = State.tileToScreen(x, y)
       if y > State.unlockedRows then
-        love.graphics.setColor(0.08, 0.07, 0.05, 1)
-        love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+        love.graphics.setColor(0.45, 0.40, 0.30, 0.6)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
       else
       local r, g, b = tileFill(t)
       love.graphics.setColor(r, g, b, 1)
@@ -352,6 +402,13 @@ local function drawGrid()
           love.graphics.setColor(1, 0.3, 0.9, 1)
           love.graphics.circle("fill", sx + C.TILE - 10, sy + C.TILE - 9, 4)
         end
+      end
+
+      if t.restrict then
+        love.graphics.setColor(1, 0.5, 0.5, 0.85)
+        love.graphics.setLineWidth(2)
+        love.graphics.rectangle("line", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+        love.graphics.setLineWidth(1)
       end
 
       if t.ferts then
@@ -440,6 +497,8 @@ local function drawGrid()
       else
         cr, cg, cb, ca = 0.6, 0.3, 0.3, 0.20
       end
+    elseif State.restrictMode then
+      cr, cg, cb, ca = 1, 0.4, 0.4, 0.3
     elseif State.stickMode then
       if t.state == "tilled" then
         cr, cg, cb, ca = 0.95, 0.75, 0.40, 0.35
@@ -447,7 +506,7 @@ local function drawGrid()
         cr, cg, cb, ca = 0.7, 0.3, 0.3, 0.3
       end
     elseif State.fertMode then
-      if t.state == "tilled" or t.state == "growing" or t.state == "ripe" then
+      if t.state == "tilled" or t.state == "growing" or t.state == "ripe" or t.state == "stick" then
         local tt = C.FERTILIZERS[State.fertMode].tint
         cr, cg, cb, ca = tt[1], tt[2], tt[3], 0.35
       else
@@ -540,6 +599,12 @@ local function drawRobots()
       love.graphics.circle("line", cx, cy, radius)
       love.graphics.setLineWidth(1)
     end
+    local tUnder = State.tileAt(math.floor(r.px + 0.5), math.floor(r.py + 0.5))
+    if tUnder then
+      local br, bgc, bb = tileFill(tUnder)
+      love.graphics.setColor(br, bgc, bb, 1)
+      love.graphics.circle("fill", cx, cy, C.TILE * 0.30)
+    end
     love.graphics.setFont(fontEmojiBig)
     love.graphics.setColor(rc[1], rc[2], rc[3], 1)
     local rw = fontEmojiBig:getWidth(C.ROBOT_EMOJI) * scale
@@ -555,7 +620,8 @@ local function drawRobots()
     love.graphics.print(r.name, cx - nameW * 0.5, cy - C.TILE * 0.5 + 3)
 
     if r.state == "working" and r.workTimer > 0 then
-      local total = C.WORK_TIME[r.activeTask or r.task] or 1
+      local workMult = 1 + ((r.level or 1) - 1) * C.ROBOT_WORK_MULT_PER_LEVEL
+      local total = (C.WORK_TIME[r.activeTask or r.task] or 1) / workMult
       local p = 1 - (r.workTimer / total)
       love.graphics.setColor(0, 0, 0, 0.4)
       love.graphics.rectangle("fill", cx - (C.TILE - 24) * 0.5, cy + C.TILE * 0.5 - 10, C.TILE - 24, 5, 2, 2)
@@ -602,6 +668,8 @@ local function drawHud()
       br, bg, bb = 0.2, 0.2, 0.2
     elseif b.opts.sellLabel then
       br, bg, bb = 0.45, 0.38, 0.18
+    elseif b.opts.popupItem then
+      br, bg, bb = 0.18, 0.20, 0.30
     else
       br, bg, bb = 0.22, 0.22, 0.28
     end
@@ -666,7 +734,8 @@ local function drawHud()
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(b.label, b.x + 44, b.y + 10)
     elseif b.opts.fertApply or b.opts.fertBuy then
-      local def = C.FERTILIZERS[b.opts.fertApply or b.opts.fertBuy]
+      local key = b.opts.fertApply or b.opts.fertBuy
+      local def = C.FERTILIZERS[key]
       drawCenteredEmojiTinted(fontEmojiBig, def.emoji, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE, def.tint)
       love.graphics.setFont(fontUI)
       love.graphics.setColor(1, 1, 1, 1)
@@ -678,6 +747,21 @@ local function drawHud()
       love.graphics.print(b.label, b.x + 44, b.y + 10)
     elseif b.opts.muteIcon then
       drawCenteredEmoji(fontEmojiBig, Sounds.muted and "🔇" or "🔊", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.actionToggle then
+      if b.opts.tint then
+        drawCenteredEmojiTinted(fontEmojiBig, b.opts.actionToggle, b.x + b.w * 0.5, b.y + b.h * 0.5, 32 / EMOJI_NATIVE, b.opts.tint)
+      else
+        drawCenteredEmoji(fontEmojiBig, b.opts.actionToggle, b.x + b.w * 0.5, b.y + b.h * 0.5, 32 / EMOJI_NATIVE)
+      end
+      if b.opts.count then
+        love.graphics.setFont(fontUISmall)
+        local txt = "x" .. b.opts.count
+        local tw = fontUISmall:getWidth(txt)
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", b.x + b.w - tw - 8, b.y + b.h - 16, tw + 6, 14, 3, 3)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(txt, b.x + b.w - tw - 5, b.y + b.h - 16)
+      end
     elseif b.opts.digIcon then
       drawCenteredEmoji(fontEmojiBig, "🪏", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     else
@@ -697,12 +781,93 @@ local function drawHud()
     love.graphics.rectangle("fill", barX, thumbY, 5, thumbH, 2, 2)
   end
 
+  if robotScrollMax > 0 then
+    local barX = robotViewport.x + robotViewport.w + 8
+    local barY = robotViewport.y
+    local barH = robotViewport.h
+    love.graphics.setColor(0.15, 0.15, 0.18, 1)
+    love.graphics.rectangle("fill", barX, barY, 5, barH, 2, 2)
+    local thumbH = math.max(20, barH * (barH / (barH + robotScrollMax)))
+    local thumbY = barY + (State.robotScroll / robotScrollMax) * (barH - thumbH)
+    love.graphics.setColor(0.55, 0.55, 0.65, 1)
+    love.graphics.rectangle("fill", barX, thumbY, 5, thumbH, 2, 2)
+  end
+
   local helpY = 1080 - 60
   love.graphics.setFont(fontUISmall)
   love.graphics.setColor(0.55, 0.55, 0.65, 1)
-  love.graphics.print("LMB: plant seed / harvest ripe / pull weed.", C.HUD_X, helpY)
-  love.graphics.print("RMB: place stick (tilled).  MMB: redirect nearest task-robot.", C.HUD_X, helpY + 16)
-  love.graphics.print("Dig toggle: LMB digs, RMB cancels. Sticks breed when adj plant ripens.", C.HUD_X, helpY + 32)
+  love.graphics.print("LMB: harvest, plant selected seed, or use active action.", C.HUD_X, helpY)
+  love.graphics.print("RMB: cancel mode.   MMB: queue nearest robot for tile.", C.HUD_X, helpY + 16)
+  love.graphics.print("Action bar: stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
+end
+
+local function drawHudTooltip()
+  local mx, my = love.mouse.getPosition()
+  local hovered
+  for i = #hudButtons, 1, -1 do
+    local b = hudButtons[i]
+    if b.opts.tooltip and mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h then
+      hovered = b
+      break
+    end
+  end
+  if not hovered then return end
+  local tt = hovered.opts.tooltip
+  local lines = {}
+  if tt.kind == "fertUp" then
+    local def = C.FERTILIZERS[tt.key]
+    local lvl = State.fertLevel[tt.key] or 1
+    local curDur = State.fertDuration(tt.key, lvl)
+    local nextDur = State.fertDuration(tt.key, lvl + 1)
+    local cost = State.fertUpgradeCost(tt.key)
+    table.insert(lines, { c = {1,1,1}, t = def.name .. " upgrade" })
+    table.insert(lines, { c = {0.8,0.85,0.9}, t = string.format("Duration: %ds -> %ds", curDur, nextDur) })
+    if def.baseMagnitude then
+      local curMag = State.fertMagnitude(tt.key, lvl)
+      local nextMag = State.fertMagnitude(tt.key, lvl + 1)
+      table.insert(lines, { c = {0.8,0.85,0.9}, t = string.format("Effect: x%.2f -> x%.2f", curMag, nextMag) })
+    end
+    local curBuy = State.fertBuyCost(tt.key)
+    local nextBuy = math.floor(def.buyCost * (C.FERT_BUY_COST_EXP ^ lvl))
+    table.insert(lines, { c = {0.85,0.75,0.5}, t = string.format("Buy cost: $%d -> $%d", curBuy, nextBuy) })
+    table.insert(lines, { c = {1,0.9,0.4}, t = "Cost: $" .. cost })
+  elseif tt.kind == "robotUp" then
+    local r = tt.robot
+    local lvl = r.level or 1
+    local curSp = C.ROBOT_SPEED + (lvl - 1) * C.ROBOT_SPEED_PER_LEVEL
+    local nextSp = C.ROBOT_SPEED + lvl * C.ROBOT_SPEED_PER_LEVEL
+    local curWk = 1 + (lvl - 1) * C.ROBOT_WORK_MULT_PER_LEVEL
+    local nextWk = 1 + lvl * C.ROBOT_WORK_MULT_PER_LEVEL
+    local cost = State.robotUpgradeCost(r)
+    table.insert(lines, { c = {1,1,1}, t = r.name .. " upgrade" })
+    table.insert(lines, { c = {0.8,0.85,0.9}, t = string.format("Speed: %.2f -> %.2f", curSp, nextSp) })
+    table.insert(lines, { c = {0.8,0.85,0.9}, t = string.format("Work rate: x%.3f -> x%.3f", curWk, nextWk) })
+    table.insert(lines, { c = {1,0.9,0.4}, t = "Cost: $" .. cost })
+  end
+
+  if #lines == 0 then return end
+  love.graphics.setFont(fontUI)
+  local maxW = 0
+  for _, ln in ipairs(lines) do
+    local w = fontUI:getWidth(ln.t)
+    if w > maxW then maxW = w end
+  end
+  local pad = 10
+  local lineH = 20
+  local panelW = maxW + pad * 2
+  local panelH = #lines * lineH + pad * 2
+  local px = hovered.x - panelW - 8
+  if px < 4 then px = hovered.x + hovered.w + 8 end
+  local py = hovered.y + hovered.h - panelH
+  if py < 4 then py = 4 end
+  love.graphics.setColor(0.05, 0.05, 0.08, 0.94)
+  love.graphics.rectangle("fill", px, py, panelW, panelH, 6, 6)
+  love.graphics.setColor(0.5, 0.5, 0.65, 1)
+  love.graphics.rectangle("line", px, py, panelW, panelH, 6, 6)
+  for i, ln in ipairs(lines) do
+    love.graphics.setColor(ln.c[1], ln.c[2], ln.c[3], 1)
+    love.graphics.print(ln.t, px + pad, py + pad + (i - 1) * lineH)
+  end
 end
 
 function Farm.draw()
@@ -712,6 +877,7 @@ function Farm.draw()
   drawPopups()
   drawHud()
   drawCropTooltip()
+  drawHudTooltip()
 end
 
 local function pickHover(sx, sy)
@@ -736,6 +902,11 @@ local function flashTile(tile, color)
 end
 
 local function handleLMB(tile)
+  if State.restrictMode then
+    tile.restrict = not tile.restrict
+    Sounds.play("click")
+    return
+  end
   if State.stickMode then
     if tile.state == "tilled" and State.sticks > 0 then
       State.sticks = State.sticks - 1
@@ -749,7 +920,7 @@ local function handleLMB(tile)
     return
   end
   if State.fertMode then
-    local applyOK = (tile.state == "tilled" or tile.state == "growing" or tile.state == "ripe")
+    local applyOK = (tile.state == "tilled" or tile.state == "growing" or tile.state == "ripe" or tile.state == "stick")
     if applyOK and (State.fertInventory[State.fertMode] or 0) > 0 then
       State.applyFert(tile, State.fertMode)
       Sounds.play("fert")
@@ -863,15 +1034,20 @@ end
 
 function Farm.mousepressed(x, y, btn)
   if btn == 1 then
-    for _, b in ipairs(hudButtons) do
+    for i = #hudButtons, 1, -1 do
+      local b = hudButtons[i]
       if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
         if not b.opts.disabled then
           Sounds.play(b.opts.sound or "click")
           b.onClick()
         end
+        if State.openDropdown and not b.opts.popupItem and not b.opts.dropdownTrigger then
+          State.openDropdown = nil
+        end
         return
       end
     end
+    if State.openDropdown then State.openDropdown = nil end
   end
 
   if x < C.GRID_OX or x > C.GRID_OX + C.GRID_W * C.TILE then return end
@@ -904,7 +1080,10 @@ end
 
 function Farm.wheelmoved(_, dy)
   local mx, my = love.mouse.getPosition()
-  if mx >= seedViewport.x and mx <= seedViewport.x + seedViewport.w + 16
+  if mx >= robotViewport.x and mx <= robotViewport.x + robotViewport.w + 16
+     and my >= robotViewport.y and my <= robotViewport.y + robotViewport.h then
+    State.robotScroll = math.max(0, math.min(robotScrollMax, State.robotScroll - dy * 50))
+  elseif mx >= seedViewport.x and mx <= seedViewport.x + seedViewport.w + 16
      and my >= seedViewport.y and my <= seedViewport.y + seedViewport.h then
     State.seedScroll = math.max(0, math.min(seedScrollMax, State.seedScroll - dy * 36))
   end
