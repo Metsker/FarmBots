@@ -49,6 +49,8 @@ function State.init()
   State.openDropdown = nil
   State.openModal = nil
   State.discovered = {}
+  State.debugPanel = false
+  State.debugRevealAll = false
 
   State.tiles = {}
   for y = 1, C.GRID_H do
@@ -59,6 +61,8 @@ function State.init()
   end
 
   State.seeds = {}
+  State.cropInventory = {}
+  State.invTab = "seeds"
 
   State._usedNames = {}
   State.robots = {
@@ -105,6 +109,7 @@ function State.newRobot(tx, ty, task)
     px = tx, py = ty,
     targetTx = tx, targetTy = ty,
     task = task or "Till",
+    task2 = nil,
     state = "idle",
     workTimer = 0,
     workTile = nil,
@@ -133,6 +138,21 @@ end
 function State.addPopup(x, y, text)
   State.popups[#State.popups + 1] = {
     x = x, y = y, text = text, startTime = State.time, life = 1.0,
+  }
+end
+
+function State.addCropPopup(x, y, cropIdx, tier)
+  local cropInfo = C.CROPS[cropIdx]
+  State.popups[#State.popups + 1] = {
+    kind = "crop",
+    x = x, y = y,
+    emoji = cropInfo.emoji,
+    emojiTint = cropInfo.color,
+    tier = tier,
+    tierLabel = C.TIER_NAMES[tier],
+    tierColor = C.TIER_COLORS[tier],
+    startTime = State.time,
+    life = 1.0,
   }
 end
 
@@ -323,12 +343,91 @@ function State.recordDiscovery(recipeIdx)
   State.discovered[recipeIdx] = (State.discovered[recipeIdx] or 0) + 1
 end
 
-function State.tryUnlockRow(y)
+function State.addCropToInv(cropIdx, tier)
+  local byCrop = State.cropInventory[cropIdx]
+  if not byCrop then
+    byCrop = {}
+    State.cropInventory[cropIdx] = byCrop
+  end
+  byCrop[tier] = (byCrop[tier] or 0) + 1
+end
+
+function State.cropCountAtTier(cropIdx, minTier)
+  local byCrop = State.cropInventory[cropIdx]
+  if not byCrop then return 0 end
+  local total = 0
+  for t, n in pairs(byCrop) do
+    if t >= minTier then total = total + n end
+  end
+  return total
+end
+
+local function takeOneFrom(cropIdx, minTier)
+  local byCrop = State.cropInventory[cropIdx]
+  if not byCrop then return false end
+  local bestT
+  for t, n in pairs(byCrop) do
+    if t >= minTier and n > 0 then
+      if not bestT or t < bestT then bestT = t end
+    end
+  end
+  if not bestT then return false end
+  byCrop[bestT] = byCrop[bestT] - 1
+  if byCrop[bestT] <= 0 then byCrop[bestT] = nil end
+  return true
+end
+
+function State.sellOne(cropIdx, tier)
+  local byCrop = State.cropInventory[cropIdx]
+  if not byCrop or (byCrop[tier] or 0) <= 0 then return 0 end
+  local cropInfo = C.CROPS[cropIdx]
+  local mult = cropInfo.yieldMult or 1
+  local price = math.floor(C.YIELD_TIER_VALUES[tier] * mult)
+  byCrop[tier] = byCrop[tier] - 1
+  if byCrop[tier] <= 0 then byCrop[tier] = nil end
+  State.money = State.money + price
+  State.addPopup(C.HUD_X + 50, C.HUD_OY + 30, "+$" .. price)
+  return price
+end
+
+function State.seedOne(cropIdx, tier)
+  local byCrop = State.cropInventory[cropIdx]
+  if not byCrop or (byCrop[tier] or 0) <= 0 then return false end
+  byCrop[tier] = byCrop[tier] - 1
+  if byCrop[tier] <= 0 then byCrop[tier] = nil end
+  local Genetics = require("farm.genetics")
+  State.addSeed(Genetics.baseGenome(cropIdx, tier), C.CROPS[cropIdx].name)
+  return true
+end
+
+function State.rowUnlockReqs(y)
+  return C.ROW_UNLOCK_REQS and C.ROW_UNLOCK_REQS[y - C.STARTING_ROWS]
+end
+
+function State.canUnlockRow(y)
   if y <= State.unlockedRows then return false end
   if y ~= State.unlockedRows + 1 then return false end
   local cost = State.rowUnlockCost(y)
   if not cost or State.money < cost then return false end
+  local reqs = State.rowUnlockReqs(y)
+  if reqs then
+    for _, r in ipairs(reqs) do
+      if State.cropCountAtTier(r.crop, r.tier) < r.count then return false end
+    end
+  end
+  return true
+end
+
+function State.tryUnlockRow(y)
+  if not State.canUnlockRow(y) then return false end
+  local cost = State.rowUnlockCost(y)
   State.money = State.money - cost
+  local reqs = State.rowUnlockReqs(y)
+  if reqs then
+    for _, r in ipairs(reqs) do
+      for _ = 1, r.count do takeOneFrom(r.crop, r.tier) end
+    end
+  end
   State.unlockedRows = y
   return true
 end

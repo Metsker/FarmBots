@@ -5,33 +5,23 @@ local Sounds = require("farm.sounds")
 
 local Sim = {}
 
-local function findRobotJob(robot)
-  local task = robot.task
-  if task == "Idle" then return nil end
-
-  local claimed = {}
-  for _, r in ipairs(State.robots) do
-    if r ~= robot and r.workTile and (r.state == "moving" or r.state == "working") then
-      claimed[r.workTile] = true
-    end
+local function tileMatchesTask(t, task)
+  if task == "Till" then return t.state == "wild"
+  elseif task == "Water" then return t.state == "growing" and t.crop and t.crop.water < C.WATER_REFILL_GATE
+  elseif task == "Weed" then return t.weed and true or false
+  elseif task == "Replant" then return t.state == "ripe" and not t.restrict
   end
+  return false
+end
 
+local function findJobForTask(robot, task, claimed)
+  if not task or task == "Idle" or task == "None" then return nil end
   local best
   local bestDist
   for y = 1, State.unlockedRows do
     for x = 1, C.GRID_W do
       local t = State.tiles[y][x]
-      local match = false
-      if task == "Till" then
-        match = (t.state == "wild")
-      elseif task == "Water" then
-        match = (t.state == "growing" and t.crop and t.crop.water < C.WATER_REFILL_GATE)
-      elseif task == "Weed" then
-        match = t.weed
-      elseif task == "Replant" then
-        match = (t.state == "ripe" and not t.restrict)
-      end
-      if match and not claimed[t] then
+      if tileMatchesTask(t, task) and not claimed[t] then
         local dx, dy = x - robot.px, y - robot.py
         local d = dx*dx + dy*dy
         if not bestDist or d < bestDist then
@@ -42,6 +32,20 @@ local function findRobotJob(robot)
     end
   end
   return best
+end
+
+local function findRobotJob(robot)
+  local claimed = {}
+  for _, r in ipairs(State.robots) do
+    if r ~= robot and r.workTile and (r.state == "moving" or r.state == "working") then
+      claimed[r.workTile] = true
+    end
+  end
+  local tile = findJobForTask(robot, robot.task, claimed)
+  if tile then return tile, robot.task end
+  tile = findJobForTask(robot, robot.task2, claimed)
+  if tile then return tile, robot.task2 end
+  return nil, nil
 end
 
 local function pickClosestEmpty(robot)
@@ -123,9 +127,9 @@ local function updateRobot(robot, dt)
       end
     end
 
-    local tile = findRobotJob(robot)
+    local tile, matchedTask = findRobotJob(robot)
     if tile then
-      robot.activeTask = nil
+      robot.activeTask = matchedTask
       robot.workTile = tile
       robot.targetTx = tile.x
       robot.targetTy = tile.y

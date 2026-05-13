@@ -88,7 +88,7 @@ local function drawBestiary()
 
   for ri, r in ipairs(C.CROP_RECIPES) do
     local count = (State.discovered and State.discovered[ri]) or 0
-    local found = count > 0
+    local found = count > 0 or State.debugRevealAll
     local rowY = listY + (ri - 1) * stride - scroll
     if rowY + rowH >= listY and rowY <= listY + listH then
       if found then
@@ -151,9 +151,17 @@ local function drawBestiary()
         drawHiddenCell(108)
       end
 
-      if found then
+      if count > 0 then
         love.graphics.setColor(0.65, 0.90, 0.65, 1)
-        love.graphics.print("x" .. count, cx, textY)
+        local txt = "x" .. count
+        love.graphics.print(txt, cx, textY)
+        cx = cx + fonts.ui:getWidth(txt) + 10
+      end
+
+      if State.debugRevealAll then
+        local chanceTxt = string.format("%d%%", math.floor(r.chance * 100 + 0.5))
+        love.graphics.setColor(0.75, 0.80, 0.95, 1)
+        love.graphics.print(chanceTxt, cx, textY)
       end
     end
   end

@@ -91,6 +91,7 @@ local function snapshotRobots()
       name = r.name,
       px = r.px, py = r.py,
       task = r.task,
+      task2 = r.task2,
       level = r.level or 1,
       speed = r.speed or C.ROBOT_SPEED,
       color = r.color,
@@ -102,6 +103,7 @@ end
 
 function Save.save()
   local data = {
+    schema = C.SAVE_SCHEMA,
     money = State.money,
     sticks = State.sticks,
     time = State.time,
@@ -112,6 +114,8 @@ function Save.save()
     fertInventory = State.fertInventory,
     fertLevel = State.fertLevel,
     discovered = State.discovered,
+    cropInventory = State.cropInventory,
+    invTab = State.invTab,
     seeds = snapshotSeeds(),
     robots = snapshotRobots(),
     tiles = snapshotTiles(),
@@ -129,6 +133,10 @@ function Save.load()
   if not chunk then print("[save] load error: " .. tostring(err)); return false end
   local ok, data = pcall(chunk)
   if not ok or type(data) ~= "table" then print("[save] eval error"); return false end
+  if data.schema ~= C.SAVE_SCHEMA then
+    print(string.format("[save] schema mismatch (got %s, want %d) — starting fresh", tostring(data.schema), C.SAVE_SCHEMA))
+    return false
+  end
 
   State.money = data.money or 0
   State.sticks = data.sticks or 0
@@ -140,6 +148,8 @@ function Save.load()
   State.fertInventory = data.fertInventory or {}
   State.fertLevel = data.fertLevel or {}
   State.discovered = data.discovered or {}
+  State.cropInventory = data.cropInventory or {}
+  State.invTab = data.invTab or "seeds"
   for _, k in ipairs(C.FERT_KEYS) do
     State.fertInventory[k] = State.fertInventory[k] or 0
     State.fertLevel[k] = State.fertLevel[k] or 1
@@ -196,6 +206,7 @@ function Save.load()
     r.targetTx = rd.px
     r.targetTy = rd.py
     r.task = rd.task or "Till"
+    r.task2 = rd.task2
     r.level = rd.level or 1
     r.speed = rd.speed or C.ROBOT_SPEED
     r.color = rd.color or r.color

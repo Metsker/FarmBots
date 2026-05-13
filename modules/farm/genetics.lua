@@ -30,41 +30,37 @@ end
 function Genetics.cloneGenome(g)
   return {
     color = g.color,
-    yieldTier = g.yieldTier,
-    growTimeTier = g.growTimeTier,
+    tier = g.tier,
   }
 end
 
-function Genetics.baseGenome(cropIndex, yieldTier, growTimeTier)
+function Genetics.baseGenome(cropIndex, tier)
   return {
     color = cropIndex,
-    yieldTier = yieldTier or 1,
-    growTimeTier = growTimeTier or 1,
+    tier = tier or 1,
   }
 end
 
 function Genetics.phenotype(g)
   local cropInfo = C.CROPS[g.color]
   local mult = cropInfo.yieldMult or 1
+  local tier = g.tier
   return {
-    yieldTier    = g.yieldTier,
-    growTimeTier = g.growTimeTier,
-    yield        = math.floor(C.YIELD_TIER_VALUES[g.yieldTier] * mult),
-    growTime     = C.GROWTIME_TIER_VALUES[g.growTimeTier],
+    tier         = tier,
+    yield        = math.floor(C.YIELD_TIER_VALUES[tier] * mult),
+    growTime     = C.GROWTIME_TIER_VALUES[tier],
     cropIndex    = g.color,
     name         = cropInfo.name,
     emoji        = cropInfo.emoji,
     tint         = cropInfo.color or { 1, 1, 1 },
-    yieldLabel   = C.TIER_NAMES[g.yieldTier],
-    growLabel    = C.TIER_NAMES[g.growTimeTier],
+    tierLabel    = C.TIER_NAMES[tier],
   }
 end
 
 function Genetics.cross(parentA, parentB)
   return {
-    yieldTier    = rollImprove(math.max(parentA.yieldTier,    parentB.yieldTier)),
-    growTimeTier = rollImprove(math.max(parentA.growTimeTier, parentB.growTimeTier)),
-    color        = pickColor(parentA.color, parentB.color),
+    tier  = rollImprove(math.max(parentA.tier, parentB.tier)),
+    color = pickColor(parentA.color, parentB.color),
   }
 end
 

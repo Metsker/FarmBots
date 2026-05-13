@@ -31,6 +31,16 @@ local C = {
     { name="Pineapple",  emoji="🍍", color={1.00, 0.85, 0.25}, yieldMult = 5 },
     { name="Avocado",    emoji="🥑", color={0.55, 0.75, 0.35}, yieldMult = 7 },
     { name="Coconut",    emoji="🥥", color={0.75, 0.55, 0.30}, yieldMult = 10 },
+    { name="Onion",      emoji="🧅", color={0.95, 0.80, 0.55}, yieldMult = 2 },
+    { name="Pepper",     emoji="🫑", color={0.35, 0.75, 0.40}, yieldMult = 3 },
+    { name="Garlic",     emoji="🧄", color={0.95, 0.92, 0.85}, yieldMult = 3 },
+    { name="Cherry",     emoji="🍒", color={0.85, 0.15, 0.25}, yieldMult = 3 },
+    { name="Mushroom",   emoji="🍄", color={0.75, 0.30, 0.30}, yieldMult = 4 },
+    { name="Grapes",     emoji="🍇", color={0.55, 0.35, 0.75}, yieldMult = 4 },
+    { name="Lemon",      emoji="🍋", color={1.00, 0.95, 0.30}, yieldMult = 4 },
+    { name="Pumpkin",    emoji="🎃", color={1.00, 0.55, 0.10}, yieldMult = 5 },
+    { name="Banana",     emoji="🍌", color={1.00, 0.90, 0.40}, yieldMult = 6 },
+    { name="Mango",      emoji="🥭", color={1.00, 0.70, 0.20}, yieldMult = 8 },
   },
 
   TIER_NAMES = { "E", "D", "C", "B", "A", "S" },
@@ -60,6 +70,21 @@ local C = {
     { a="Broccoli",   b="Avocado",    result="Coconut",    chance=0.20 },
     { a="Tomato",     b="Corn",       result="Chili",      chance=0.20 },
     { a="Chili",      b="Eggplant",   result="Strawberry", chance=0.20 },
+    { a="Tomato",     b="Tomato",     result="Onion",      chance=0.30 },
+    { a="Carrot",     b="Onion",      result="Pepper",     chance=0.30 },
+    { a="Carrot",     b="Chili",      result="Garlic",     chance=0.25 },
+    { a="Strawberry", b="Chili",      result="Cherry",     chance=0.25 },
+    { a="Strawberry", b="Strawberry", result="Grapes",     chance=0.25 },
+    { a="Cucumber",   b="Broccoli",   result="Mushroom",   chance=0.25 },
+    { a="Onion",      b="Garlic",     result="Mushroom",   chance=0.30 },
+    { a="Pineapple",  b="Strawberry", result="Lemon",      chance=0.25 },
+    { a="Corn",       b="Eggplant",   result="Pumpkin",    chance=0.25 },
+    { a="Cherry",     b="Grapes",     result="Watermelon", chance=0.25 },
+    { a="Pepper",     b="Pumpkin",    result="Banana",     chance=0.22 },
+    { a="Pineapple",  b="Avocado",    result="Banana",     chance=0.20 },
+    { a="Mushroom",   b="Pumpkin",    result="Eggplant",   chance=0.25 },
+    { a="Coconut",    b="Pineapple",  result="Mango",      chance=0.20 },
+    { a="Lemon",      b="Mango",      result="Coconut",    chance=0.18 },
   },
 
   WORK_TIME = { Till=2.0, Water=1.5, Weed=1.5, Replant=1.0 },
@@ -164,6 +189,7 @@ local C = {
 
   SAVE_FILE = "save.lua",
   SAVE_INTERVAL = 60,
+  SAVE_SCHEMA = 2,
 }
 
 -- Derived lookups: name → index, and recipe lookup by sorted-index key.
@@ -189,6 +215,60 @@ for ri, r in ipairs(C.CROP_RECIPES) do
     bName     = r.b,
     resultName= r.result,
   }
+end
+
+local TIER = {}
+for i, name in ipairs(C.TIER_NAMES) do TIER[name] = i end
+
+-- Row unlock crop requirements. Each entry corresponds to rows 4..11 (i.e. starting row + i).
+-- { crop = "Name", tier = "E"-"S", count = N }
+local UNLOCK_RAW = {
+  -- Row 4
+  { { crop="Tomato",     tier="E", count=3 } },
+  -- Row 5
+  { { crop="Carrot",     tier="D", count=5 } },
+  -- Row 6
+  { { crop="Cucumber",   tier="D", count=3 },
+    { crop="Chili",      tier="D", count=3 },
+    { crop="Onion",      tier="D", count=2 } },
+  -- Row 7
+  { { crop="Corn",       tier="D", count=2 },
+    { crop="Strawberry", tier="D", count=2 },
+    { crop="Pepper",     tier="D", count=2 },
+    { crop="Garlic",     tier="D", count=2 } },
+  -- Row 8
+  { { crop="Broccoli",   tier="C", count=2 },
+    { crop="Pineapple",  tier="C", count=2 },
+    { crop="Eggplant",   tier="C", count=2 },
+    { crop="Cherry",     tier="C", count=2 },
+    { crop="Grapes",     tier="C", count=2 } },
+  -- Row 9
+  { { crop="Watermelon", tier="B", count=2 },
+    { crop="Mushroom",   tier="B", count=2 },
+    { crop="Pumpkin",    tier="B", count=2 },
+    { crop="Lemon",      tier="B", count=2 } },
+  -- Row 10
+  { { crop="Avocado",    tier="B", count=2 },
+    { crop="Banana",     tier="A", count=2 } },
+  -- Row 11
+  { { crop="Coconut",    tier="A", count=2 },
+    { crop="Mango",      tier="A", count=2 },
+    { crop="Banana",     tier="A", count=2 },
+    { crop="Avocado",    tier="A", count=2 },
+    { crop="Lemon",      tier="B", count=2 } },
+}
+
+C.ROW_UNLOCK_REQS = {}
+for ri, reqs in ipairs(UNLOCK_RAW) do
+  local out = {}
+  for _, r in ipairs(reqs) do
+    out[#out + 1] = {
+      crop  = assert(C.CROP_INDEX[r.crop], "unknown crop in unlock req: " .. r.crop),
+      tier  = assert(TIER[r.tier], "unknown tier in unlock req: " .. r.tier),
+      count = r.count,
+    }
+  end
+  C.ROW_UNLOCK_REQS[ri] = out
 end
 
 return C

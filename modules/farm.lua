@@ -34,6 +34,11 @@ local seedScrollMax = 0
 local robotViewport = { x = 0, y = 0, w = 0, h = 0 }
 local robotScrollMax = 0
 
+local held = nil  -- { onClick, x, y, w, h, nextFire, delay }
+local HOLD_INITIAL_DELAY = 0.30
+local HOLD_MIN_DELAY = 0.04
+local HOLD_DECAY = 0.85
+
 local function hudBtn(id, x, y, w, h, label, onClick, opts)
   hudButtons[#hudButtons + 1] = {
     id = id, x = x, y = y, w = w, h = h,
@@ -69,8 +74,12 @@ local function rebuildHudButtons()
     function() State.openModal = "resetConfirm" end,
     { resetIcon = true })
 
-  hudBtn("save", hx + hw - BTN_H * 3 - 12, C.HUD_OY, BTN_H, BTN_H, "",
-    function() Save.save() end,
+  local saveBx = hx + hw - BTN_H * 3 - 12
+  hudBtn("save", saveBx, C.HUD_OY, BTN_H, BTN_H, "",
+    function()
+      Save.save()
+      State.addPopup(saveBx + BTN_H * 0.5, C.HUD_OY + BTN_H + 8, "Saved!")
+    end,
     { saveIcon = true, sound = "buy" })
 
   hudBtn("bestiary", hx + hw - BTN_H * 4 - 18, C.HUD_OY, BTN_H, BTN_H, "",
@@ -79,6 +88,19 @@ local function rebuildHudButtons()
       else State.openModal = "bestiary" end
     end,
     { bestiaryIcon = true, active = State.openModal == "bestiary" })
+
+  if State.debugPanel then
+    hudBtn("dbg_money", hx + hw - BTN_H * 5 - 32, C.HUD_OY, BTN_H, BTN_H, "",
+      function()
+        State.money = State.money + 1000
+        State.addPopup(C.HUD_X + 50, C.HUD_OY + 30, "+$1000")
+      end,
+      { debugMoneyIcon = true })
+
+    hudBtn("dbg_reveal", hx + hw - BTN_H * 6 - 38, C.HUD_OY, BTN_H, BTN_H, "",
+      function() State.debugRevealAll = not State.debugRevealAll end,
+      { debugRevealIcon = true, active = State.debugRevealAll })
+  end
 
   local actionBarY = C.HUD_OY + 80
   local actionCursor = hx
@@ -151,7 +173,9 @@ local function rebuildHudButtons()
       local w = btnW(tn)
       if w > maxTaskW then maxTaskW = w end
     end
+    local noneW = btnW("None")
     local tkW = math.max(maxTaskW, btnW(taskLabel))
+    local tk2W = math.max(maxTaskW, noneW, btnW(r.task2 or "None"))
     local ddKey = "task_" .. i
     hudBtn("robot_task_" .. i, cursorX, rowY, tkW, BTN_H, taskLabel,
       function()
@@ -160,9 +184,30 @@ local function rebuildHudButtons()
       end,
       { active = (State.openDropdown == ddKey), dropdownTrigger = ddKey })
     if State.openDropdown == ddKey then
-      pendingPopups[#pendingPopups + 1] = { robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tkW }
+      pendingPopups[#pendingPopups + 1] = {
+        robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tkW,
+        taskList = C.TASKS,
+        kind = "primary",
+      }
     end
     cursorX = cursorX + tkW + BTN_GAP
+
+    local task2Label = r.task2 or "None"
+    local ddKey2 = "task2_" .. i
+    hudBtn("robot_task2_" .. i, cursorX, rowY, tk2W, BTN_H, task2Label,
+      function()
+        if State.openDropdown == ddKey2 then State.openDropdown = nil
+        else State.openDropdown = ddKey2 end
+      end,
+      { active = (State.openDropdown == ddKey2), dropdownTrigger = ddKey2, dim = r.task2 == nil })
+    if State.openDropdown == ddKey2 then
+      pendingPopups[#pendingPopups + 1] = {
+        robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tk2W,
+        taskList = { "None", "Till", "Water", "Weed", "Replant" },
+        kind = "fallback",
+      }
+    end
+    cursorX = cursorX + tk2W + BTN_GAP
 
     local upCost = State.robotUpgradeCost(r)
     local speedLabel = "Lv" .. (r.level or 1) .. " $" .. upCost
@@ -189,32 +234,95 @@ local function rebuildHudButtons()
     ::continue_robot::
   end
 
-  local seedTop = robotsTop + robotViewportH + 14
+  local tabRowY = robotsTop + robotViewportH + 14
+  local tabH = 28
+  do
+    local seedCount = #State.seeds
+    local cropCount = 0
+    for _, byTier in pairs(State.cropInventory or {}) do
+      for _, n in pairs(byTier) do cropCount = cropCount + n end
+    end
+    local halfW = math.floor((hw - 60 - BTN_GAP) / 2)
+    hudBtn("tab_seeds", hx, tabRowY, halfW, tabH,
+      "Seeds (" .. seedCount .. ")",
+      function() State.invTab = "seeds" end,
+      { selected = State.invTab == "seeds", centerLabel = true })
+    hudBtn("tab_crops", hx + halfW + BTN_GAP, tabRowY, halfW, tabH,
+      "Crops (" .. cropCount .. ")",
+      function() State.invTab = "crops" end,
+      { selected = State.invTab == "crops", centerLabel = true })
+  end
+
+  local seedTop = tabRowY + tabH + 6
   local seedBottomLimit = buyY - 14
   local viewportH = math.max(60, seedBottomLimit - seedTop)
   seedViewport = { x = hx, y = seedTop, w = hw - 60, h = viewportH }
   local rowH = 36
-  local contentH = #State.seeds * rowH
-  local scrollMax = math.max(0, contentH - viewportH)
-  if State.seedScroll > scrollMax then State.seedScroll = scrollMax end
-  if State.seedScroll < 0 then State.seedScroll = 0 end
-  seedScrollMax = scrollMax
-  local sellBtnW = 76
-  local selBtnW = (hw - 60) - sellBtnW - 4
-  for i = 1, #State.seeds do
-    local s = State.seeds[i]
-    local rowY = seedTop + (i - 1) * rowH - State.seedScroll
-    if rowY >= seedTop and rowY + 32 <= seedTop + viewportH then
-      hudBtn("seed_" .. s.id, hx, rowY, selBtnW, 32,
-        string.format("Yield=%s   Time=%s",
-          s.pheno.yieldLabel, s.pheno.growLabel),
-        function() State.toggleSeed(s.id) end,
-        { selected = (State.selectedSeedId == s.id), emojiIndex = 2 })
-      local sellVal = math.max(1, math.floor(s.pheno.yield * 0.1))
-      hudBtn("sell_" .. s.id, hx + selBtnW + 4, rowY, sellBtnW, 32,
-        "Sell $" .. sellVal,
-        function() State.sellSeed(s.id) end,
-        { sellLabel = true, sound = "sell" })
+  local activeTab = State.invTab or "seeds"
+  if activeTab == "seeds" then
+    local contentH = #State.seeds * rowH
+    local scrollMax = math.max(0, contentH - viewportH)
+    if State.seedScroll > scrollMax then State.seedScroll = scrollMax end
+    if State.seedScroll < 0 then State.seedScroll = 0 end
+    seedScrollMax = scrollMax
+    local sellBtnW = 76
+    local selBtnW = (hw - 60) - sellBtnW - 4
+    for i = 1, #State.seeds do
+      local s = State.seeds[i]
+      local rowY = seedTop + (i - 1) * rowH - State.seedScroll
+      if rowY >= seedTop and rowY + 32 <= seedTop + viewportH then
+        hudBtn("seed_" .. s.id, hx, rowY, selBtnW, 32,
+          string.format("Tier=%s", s.pheno.tierLabel),
+          function() State.toggleSeed(s.id) end,
+          { selected = (State.selectedSeedId == s.id), emojiIndex = 2 })
+        local sellVal = math.max(1, math.floor(s.pheno.yield * 0.1))
+        hudBtn("sell_" .. s.id, hx + selBtnW + 4, rowY, sellBtnW, 32,
+          "Sell $" .. sellVal,
+          function() State.sellSeed(s.id) end,
+          { sellLabel = true, sound = "sell", centerLabel = true })
+      end
+    end
+  else
+    -- Crops tab: flatten cropInventory into a sorted list of (crop, tier, count)
+    local rows = {}
+    for cropIdx = 1, #C.CROPS do
+      local byTier = State.cropInventory[cropIdx]
+      if byTier then
+        for tier = #C.TIER_NAMES, 1, -1 do
+          local n = byTier[tier]
+          if n and n > 0 then
+            rows[#rows + 1] = { crop = cropIdx, tier = tier, count = n }
+          end
+        end
+      end
+    end
+    local contentH = #rows * rowH
+    local scrollMax = math.max(0, contentH - viewportH)
+    if State.seedScroll > scrollMax then State.seedScroll = scrollMax end
+    if State.seedScroll < 0 then State.seedScroll = 0 end
+    seedScrollMax = scrollMax
+    local seedBtnW = 56
+    local sellBtnW = 90
+    local infoBtnW = (hw - 60) - seedBtnW - sellBtnW - 8
+    for i, row in ipairs(rows) do
+      local rowY = seedTop + (i - 1) * rowH - State.seedScroll
+      if rowY >= seedTop and rowY + 32 <= seedTop + viewportH then
+        local cropInfo = C.CROPS[row.crop]
+        local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
+        local idCrop = row.crop .. "_" .. row.tier
+        hudBtn("invc_" .. idCrop, hx, rowY, infoBtnW, 32,
+          "",
+          function() end,
+          { cropRow = row })
+        hudBtn("invc_sell_" .. idCrop, hx + infoBtnW + 4, rowY, sellBtnW, 32,
+          "Sell $" .. price,
+          function() State.sellOne(row.crop, row.tier) end,
+          { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true })
+        hudBtn("invc_seed_" .. idCrop, hx + infoBtnW + sellBtnW + 8, rowY, seedBtnW, 32,
+          "Seed",
+          function() State.seedOne(row.crop, row.tier) end,
+          { sound = "buy", holdRepeat = true, centerLabel = true })
+      end
     end
   end
 
@@ -256,7 +364,7 @@ local function rebuildHudButtons()
       function()
         if canBuyTomato then
           State.money = State.money - tCost
-          local g = require("farm.genetics").baseGenome(1, 1, 1)
+          local g = require("farm.genetics").baseGenome(1, 1)
           State.addSeed(g, "Tomato")
         end
       end,
@@ -271,7 +379,7 @@ local function rebuildHudButtons()
       function()
         if canBuyCarrot then
           State.money = State.money - cCost
-          local g = require("farm.genetics").baseGenome(2, 1, 1)
+          local g = require("farm.genetics").baseGenome(2, 1)
           State.addSeed(g, "Carrot")
         end
       end,
@@ -302,15 +410,26 @@ local function rebuildHudButtons()
 
   for _, pop in ipairs(pendingPopups) do
     local popY = pop.y
-    for ti, taskName in ipairs(C.TASKS) do
-      hudBtn("task_pop_" .. pop.robotIdx .. "_" .. ti, pop.x, popY, pop.w, BTN_H, taskName,
+    for ti, taskName in ipairs(pop.taskList) do
+      local current
+      if pop.kind == "fallback" then
+        current = pop.robotRef.task2 or "None"
+      else
+        current = pop.robotRef.task
+      end
+      local idPrefix = (pop.kind == "fallback") and "task2_pop_" or "task_pop_"
+      hudBtn(idPrefix .. pop.robotIdx .. "_" .. ti, pop.x, popY, pop.w, BTN_H, taskName,
         function()
-          pop.robotRef.task = taskName
-          pop.robotRef.state = "idle"
-          pop.robotRef.idleTimer = 0
+          if pop.kind == "fallback" then
+            pop.robotRef.task2 = (taskName == "None") and nil or taskName
+          else
+            pop.robotRef.task = taskName
+            pop.robotRef.state = "idle"
+            pop.robotRef.idleTimer = 0
+          end
           State.openDropdown = nil
         end,
-        { active = (pop.robotRef.task == taskName), popupItem = true })
+        { active = (current == taskName), popupItem = true })
       popY = popY + BTN_H + 2
     end
   end
@@ -339,36 +458,26 @@ function Farm.update(dt)
   Sim.update(dt)
   State.tickPopups()
   rebuildHudButtons()
+  if held then
+    local mx, my = love.mouse.getPosition()
+    if not love.mouse.isDown(1)
+      or mx < held.x or mx > held.x + held.w
+      or my < held.y or my > held.y + held.h then
+      held = nil
+    else
+      held.nextFire = held.nextFire - dt
+      if held.nextFire <= 0 then
+        held.onClick()
+        held.delay = math.max(HOLD_MIN_DELAY, held.delay * HOLD_DECAY)
+        held.nextFire = held.delay
+      end
+    end
+  end
   autoSaveAccum = autoSaveAccum + dt
   if autoSaveAccum >= C.SAVE_INTERVAL then
     autoSaveAccum = 0
     Save.save()
   end
-end
-
-local function drawPopups()
-  love.graphics.setFont(fontUIBig)
-  for _, p in ipairs(State.popups) do
-    local elapsed = State.time - p.startTime
-    local t = elapsed / p.life
-    if t < 1 then
-      local y = p.y - 60 * t
-      local alpha = 1 - t
-      local w = fontUIBig:getWidth(p.text)
-      love.graphics.setColor(0, 0, 0, 0.6 * alpha)
-      love.graphics.print(p.text, p.x - w * 0.5 + 2, y + 2)
-      love.graphics.setColor(1, 0.95, 0.4, alpha)
-      love.graphics.print(p.text, p.x - w * 0.5, y)
-    end
-  end
-end
-
-local function tileFill(t)
-  if t.state == "wild"   then return 0.30, 0.22, 0.16 end
-  if t.state == "tilled" then return 0.45, 0.30, 0.18 end
-  if t.state == "growing" or t.state == "ripe" then return 0.38, 0.27, 0.17 end
-  if t.state == "stick"  then return 0.42, 0.28, 0.18 end
-  return 0.2, 0.2, 0.2
 end
 
 local function drawEmoji(font, glyph, x, y, scale)
@@ -391,10 +500,53 @@ local function drawCenteredEmojiTinted(font, glyph, cx, cy, scale, tint)
   scale = scale or 1
   love.graphics.setFont(font)
   local c = tint or { 1, 1, 1 }
-  love.graphics.setColor(c[1], c[2], c[3], 1)
+  love.graphics.setColor(c[1], c[2], c[3], c[4] or 1)
   local w = font:getWidth(glyph) * scale
   local h = font:getHeight() * scale
   love.graphics.print(glyph, cx - w * 0.5, cy - h * 0.5, 0, scale, scale)
+end
+
+local function drawPopups()
+  for _, p in ipairs(State.popups) do
+    local elapsed = State.time - p.startTime
+    local t = elapsed / p.life
+    if t < 1 then
+      local y = p.y - 60 * t
+      local alpha = 1 - t
+      if p.kind == "crop" then
+        local emojiScale = 28 / EMOJI_NATIVE
+        local emojiW = fontEmojiBig:getWidth(p.emoji) * emojiScale
+        local gap = 8
+        love.graphics.setFont(fontUIBig)
+        local tierW = fontUIBig:getWidth(p.tierLabel)
+        local totalW = emojiW + gap + tierW
+        local x0 = p.x - totalW * 0.5
+        local ty = y + (fontEmojiBig:getHeight() * emojiScale - fontUIBig:getHeight()) * 0.5
+        drawCenteredEmojiTinted(fontEmojiBig, p.emoji, x0 + emojiW * 0.5, y + fontEmojiBig:getHeight() * emojiScale * 0.5, emojiScale, { p.emojiTint[1], p.emojiTint[2], p.emojiTint[3], alpha })
+        love.graphics.setFont(fontUIBig)
+        love.graphics.setColor(0, 0, 0, 0.6 * alpha)
+        love.graphics.print(p.tierLabel, x0 + emojiW + gap + 2, ty + 2)
+        local tc = p.tierColor or { 1, 1, 1 }
+        love.graphics.setColor(tc[1], tc[2], tc[3], alpha)
+        love.graphics.print(p.tierLabel, x0 + emojiW + gap, ty)
+      else
+        love.graphics.setFont(fontUIBig)
+        local w = fontUIBig:getWidth(p.text)
+        love.graphics.setColor(0, 0, 0, 0.6 * alpha)
+        love.graphics.print(p.text, p.x - w * 0.5 + 2, y + 2)
+        love.graphics.setColor(1, 0.95, 0.4, alpha)
+        love.graphics.print(p.text, p.x - w * 0.5, y)
+      end
+    end
+  end
+end
+
+local function tileFill(t)
+  if t.state == "wild"   then return 0.30, 0.22, 0.16 end
+  if t.state == "tilled" then return 0.45, 0.30, 0.18 end
+  if t.state == "growing" or t.state == "ripe" then return 0.38, 0.27, 0.17 end
+  if t.state == "stick"  then return 0.42, 0.28, 0.18 end
+  return 0.2, 0.2, 0.2
 end
 
 local function drawGrid()
@@ -496,18 +648,69 @@ local function drawGrid()
   for y = State.unlockedRows + 1, C.GRID_H do
     local centerX = C.GRID_OX + C.GRID_W * C.TILE * 0.5
     local centerY = C.GRID_OY + (y - 0.5) * C.TILE
-    drawCenteredEmojiTinted(fontEmojiBig, C.LOCK_EMOJI, centerX, centerY - 14, 48 / EMOJI_NATIVE, C.LOCK_TINT)
+    drawCenteredEmojiTinted(fontEmojiBig, C.LOCK_EMOJI, C.GRID_OX + 22, centerY, 36 / EMOJI_NATIVE, C.LOCK_TINT)
+
     love.graphics.setFont(fontUIBig)
     local cost = State.rowUnlockCost(y) or 0
-    local txt = "Unlock $" .. cost
-    local affordable = State.money >= cost and y == State.unlockedRows + 1
-    if affordable then
+    local moneyOk = State.money >= cost
+    local nextRow = y == State.unlockedRows + 1
+    local costTxt = "$" .. cost
+    if moneyOk and nextRow then
       love.graphics.setColor(1, 0.95, 0.45, 1)
+    elseif moneyOk then
+      love.graphics.setColor(0.9, 0.85, 0.55, 1)
     else
-      love.graphics.setColor(0.6, 0.5, 0.3, 1)
+      love.graphics.setColor(0.95, 0.45, 0.45, 1)
     end
-    local w = fontUIBig:getWidth(txt)
-    love.graphics.print(txt, centerX - w * 0.5, centerY + 18)
+    local reqs = State.rowUnlockReqs(y)
+    local emojiScale = 28 / EMOJI_NATIVE
+    local cellGap = 16
+    local costW = fontUIBig:getWidth(costTxt)
+    local cells = {}
+    local totalW = costW + cellGap
+    love.graphics.setFont(fontUI)
+    if reqs then
+      for i, r in ipairs(reqs) do
+        local have = State.cropCountAtTier(r.crop, r.tier)
+        local crop = C.CROPS[r.crop]
+        local tierName = C.TIER_NAMES[r.tier]
+        local countTxt = string.format(" %d/%d ", have, r.count)
+        local tierTxt = tierName .. "+"
+        local emojiW = fontEmoji:getWidth(crop.emoji) * emojiScale
+        local countW = fontUI:getWidth(countTxt)
+        local tierW = fontUI:getWidth(tierTxt)
+        local cw = emojiW + countW + tierW
+        cells[i] = {
+          w = cw, emojiW = emojiW, countW = countW, countTxt = countTxt,
+          tierW = tierW, tierTxt = tierTxt, tier = r.tier,
+          have = have, need = r.count, crop = crop,
+        }
+        totalW = totalW + cw
+        if i < #reqs then totalW = totalW + cellGap end
+      end
+    end
+    local cx = centerX - totalW * 0.5
+    local lineY = centerY - fontUIBig:getHeight() * 0.5
+    love.graphics.setFont(fontUIBig)
+    love.graphics.print(costTxt, cx, lineY)
+    cx = cx + costW + cellGap
+    love.graphics.setFont(fontUI)
+    local cellTextY = centerY - fontUI:getHeight() * 0.5
+    for _, cell in ipairs(cells) do
+      drawCenteredEmojiTinted(fontEmoji, cell.crop.emoji, cx + cell.emojiW * 0.5, centerY, emojiScale, cell.crop.color)
+      local satisfied = cell.have >= cell.need
+      if satisfied then
+        love.graphics.setColor(0.55, 0.95, 0.55, 1)
+      else
+        love.graphics.setColor(0.95, 0.55, 0.55, 1)
+      end
+      love.graphics.setFont(fontUI)
+      love.graphics.print(cell.countTxt, cx + cell.emojiW, cellTextY)
+      local tc = C.TIER_COLORS[cell.tier] or { 1, 1, 1 }
+      love.graphics.setColor(tc[1], tc[2], tc[3], 1)
+      love.graphics.print(cell.tierTxt, cx + cell.emojiW + cell.countW, cellTextY)
+      cx = cx + cell.w + cellGap
+    end
   end
 
   for y = 1, State.unlockedRows do
@@ -616,17 +819,14 @@ local function drawCropTooltip()
 
   local lineY = py + 42
   love.graphics.setColor(0.85, 0.85, 0.9, 1)
-  love.graphics.print("Yield: ", px + 10, lineY)
-  local yc = C.TIER_COLORS[ph.yieldTier] or { 1, 1, 1 }
-  love.graphics.setColor(yc[1], yc[2], yc[3], 1)
-  love.graphics.print(ph.yieldLabel .. " (" .. ph.yield .. ")", px + 10 + fontUI:getWidth("Yield: "), lineY)
+  love.graphics.print("Tier: ", px + 10, lineY)
+  local tc = C.TIER_COLORS[ph.tier] or { 1, 1, 1 }
+  love.graphics.setColor(tc[1], tc[2], tc[3], 1)
+  love.graphics.print(ph.tierLabel, px + 10 + fontUI:getWidth("Tier: "), lineY)
 
   lineY = lineY + 20
   love.graphics.setColor(0.85, 0.85, 0.9, 1)
-  love.graphics.print("Time: ", px + 10, lineY)
-  local gc = C.TIER_COLORS[ph.growTimeTier] or { 1, 1, 1 }
-  love.graphics.setColor(gc[1], gc[2], gc[3], 1)
-  love.graphics.print(ph.growLabel .. " (" .. ph.growTime .. "s)", px + 10 + fontUI:getWidth("Time: "), lineY)
+  love.graphics.print(string.format("%d$  %ds", ph.yield, ph.growTime), px + 10, lineY)
 
   if t.crop.hybrid then
     love.graphics.setColor(1, 0.4, 0.95, 1)
@@ -744,24 +944,53 @@ local function drawHud()
       local seed
       for _, s in ipairs(State.seeds) do if s.id == seedId then seed = s break end end
       if seed then
-        drawCenteredEmojiTinted(fontEmojiBig, seed.pheno.emoji, b.x + 18, b.y + b.h * 0.5, 28 / EMOJI_NATIVE, seed.pheno.tint)
         love.graphics.setFont(fontUI)
-        local tx = b.x + 44
-        local ty = b.y + 8
+        local emojiScale = 28 / EMOJI_NATIVE
+        local emojiW = fontEmojiBig:getWidth(seed.pheno.emoji) * emojiScale
+        local labelL = "Tier="
+        local labelR = seed.pheno.tierLabel
+        local gap = 8
+        local labelLW = fontUI:getWidth(labelL)
+        local labelRW = fontUI:getWidth(labelR)
+        local totalW = emojiW + gap + labelLW + labelRW
+        local tx = b.x + (b.w - totalW) * 0.5
+        local ty = b.y + (b.h - fontUI:getHeight()) * 0.5
+        drawCenteredEmojiTinted(fontEmojiBig, seed.pheno.emoji, tx + emojiW * 0.5, b.y + b.h * 0.5, emojiScale, seed.pheno.tint)
+        tx = tx + emojiW + gap
+        love.graphics.setFont(fontUI)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("Yield=", tx, ty)
-        tx = tx + fontUI:getWidth("Yield=")
-        local yc = C.TIER_COLORS[seed.pheno.yieldTier] or { 1, 1, 1 }
-        love.graphics.setColor(yc[1], yc[2], yc[3], 1)
-        love.graphics.print(seed.pheno.yieldLabel, tx, ty)
-        tx = tx + fontUI:getWidth(seed.pheno.yieldLabel)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("   Time=", tx, ty)
-        tx = tx + fontUI:getWidth("   Time=")
-        local gc = C.TIER_COLORS[seed.pheno.growTimeTier] or { 1, 1, 1 }
-        love.graphics.setColor(gc[1], gc[2], gc[3], 1)
-        love.graphics.print(seed.pheno.growLabel, tx, ty)
+        love.graphics.print(labelL, tx, ty)
+        local tc = C.TIER_COLORS[seed.pheno.tier] or { 1, 1, 1 }
+        love.graphics.setColor(tc[1], tc[2], tc[3], 1)
+        love.graphics.print(labelR, tx + labelLW, ty)
       end
+    elseif b.opts.cropRow then
+      local row = b.opts.cropRow
+      local cropInfo = C.CROPS[row.crop]
+      love.graphics.setFont(fontUI)
+      local emojiScale = 28 / EMOJI_NATIVE
+      local emojiW = fontEmojiBig:getWidth(cropInfo.emoji) * emojiScale
+      local nameW = fontUI:getWidth(cropInfo.name)
+      local tierStr = C.TIER_NAMES[row.tier]
+      local tierW = fontUI:getWidth(tierStr)
+      local countStr = "x" .. row.count
+      local countW = fontUI:getWidth(countStr)
+      local gap0, gap1, gap2 = 8, 8, 12
+      local totalW = emojiW + gap0 + nameW + gap1 + tierW + gap2 + countW
+      local tx = b.x + (b.w - totalW) * 0.5
+      local ty = b.y + (b.h - fontUI:getHeight()) * 0.5
+      drawCenteredEmojiTinted(fontEmojiBig, cropInfo.emoji, tx + emojiW * 0.5, b.y + b.h * 0.5, emojiScale, cropInfo.color)
+      tx = tx + emojiW + gap0
+      love.graphics.setFont(fontUI)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.print(cropInfo.name, tx, ty)
+      tx = tx + nameW + gap1
+      local tc = C.TIER_COLORS[row.tier] or { 1, 1, 1 }
+      love.graphics.setColor(tc[1], tc[2], tc[3], 1)
+      love.graphics.print(tierStr, tx, ty)
+      tx = tx + tierW + gap2
+      love.graphics.setColor(0.9, 0.9, 0.95, 1)
+      love.graphics.print(countStr, tx, ty)
     elseif b.opts.stickLabel then
       drawCenteredEmoji(fontEmojiBig, C.STICK_EMOJI, b.x + 18, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
       love.graphics.setFont(fontUI)
@@ -803,6 +1032,10 @@ local function drawHud()
       drawCenteredEmoji(fontEmojiBig, "💾", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.bestiaryIcon then
       drawCenteredEmoji(fontEmojiBig, C.BESTIARY_EMOJI, b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.debugMoneyIcon then
+      drawCenteredEmoji(fontEmojiBig, "💰", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.debugRevealIcon then
+      drawCenteredEmoji(fontEmojiBig, "👁", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.clearIcon then
       drawCenteredEmoji(fontEmojiBig, "🔄", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.actionToggle then
@@ -822,6 +1055,10 @@ local function drawHud()
       end
     elseif b.opts.digIcon then
       drawCenteredEmoji(fontEmojiBig, "🪏", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.centerLabel then
+      local lw = fontUI:getWidth(b.label)
+      local lh = fontUI:getHeight()
+      love.graphics.print(b.label, b.x + (b.w - lw) * 0.5, b.y + (b.h - lh) * 0.5)
     else
       love.graphics.print(b.label, b.x + 10, b.y + 10)
     end
@@ -933,8 +1170,8 @@ function Farm.draw()
   love.graphics.clear(0.08, 0.10, 0.08, 1)
   drawGrid()
   drawRobots()
-  drawPopups()
   drawHud()
+  drawPopups()
   drawCropTooltip()
   drawHudTooltip()
   Modals.draw()
@@ -1105,6 +1342,12 @@ function Farm.mousepressed(x, y, btn)
         if not b.opts.disabled then
           Sounds.play(b.opts.sound or "click")
           b.onClick()
+          if b.opts.holdRepeat then
+            held = {
+              onClick = b.onClick, x = b.x, y = b.y, w = b.w, h = b.h,
+              nextFire = HOLD_INITIAL_DELAY, delay = HOLD_INITIAL_DELAY,
+            }
+          end
         end
         if State.openDropdown and not b.opts.popupItem and not b.opts.dropdownTrigger then
           State.openDropdown = nil
@@ -1158,7 +1401,9 @@ function Farm.wheelmoved(dx, dy)
   end
 end
 
-function Farm.mousereleased() end
+function Farm.mousereleased(x, y, btn)
+  if btn == 1 then held = nil end
+end
 
 function Farm.keypressed(k, s, r)
   if k == "escape" then
@@ -1172,6 +1417,10 @@ function Farm.keypressed(k, s, r)
   if k == "b" then
     if State.openModal == "bestiary" then State.openModal = nil
     elseif not State.openModal then State.openModal = "bestiary" end
+    return
+  end
+  if k == "f3" then
+    State.debugPanel = not State.debugPanel
     return
   end
 end
