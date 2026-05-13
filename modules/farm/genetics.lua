@@ -10,8 +10,10 @@ local function pairKey(a, b)
 end
 
 local function pickColor(a, b)
-  local recipe = C.CROP_RECIPES[pairKey(a, b)]
+  local recipe = C.RECIPE_LOOKUP[pairKey(a, b)]
   if recipe and love.math.random() < recipe.chance then
+    local State = require("farm.state")
+    State.recordDiscovery(recipe.recipeIdx)
     return recipe.result
   end
   if love.math.random() < 0.5 then return a end

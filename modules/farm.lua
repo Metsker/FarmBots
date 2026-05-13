@@ -4,6 +4,8 @@ local Sim = require("farm.sim")
 local Genetics = require("farm.genetics")
 local Sounds = require("farm.sounds")
 local Save = require("farm.save")
+local FlexLove = require("flexlove.FlexLove")
+local Modals = require("farm.modals")
 
 local Farm = {}
 
@@ -71,6 +73,13 @@ local function rebuildHudButtons()
   hudBtn("save", hx + hw - BTN_H * 3 - 12, C.HUD_OY, BTN_H, BTN_H, "",
     function() Save.save() end,
     { saveIcon = true, sound = "buy" })
+
+  hudBtn("bestiary", hx + hw - BTN_H * 4 - 18, C.HUD_OY, BTN_H, BTN_H, "",
+    function()
+      if State.openModal == "bestiary" then State.openModal = nil
+      else State.openModal = "bestiary" end
+    end,
+    { bestiaryIcon = true, active = State.openModal == "bestiary" })
 
   local actionBarY = C.HUD_OY + 80
   local actionCursor = hx
@@ -307,19 +316,6 @@ local function rebuildHudButtons()
     end
   end
 
-  if State.openModal == "resetConfirm" then
-    local mw, mh = 320, 140
-    local mx = math.floor((1920 - mw) * 0.5)
-    local my = math.floor((1080 - mh) * 0.5)
-    local btnW2 = 120
-    local btnY = my + mh - BTN_H - 14
-    hudBtn("modal_yes", mx + 16, btnY, btnW2, BTN_H, "Yes, reset",
-      function() Save.reset(); State.openModal = nil end,
-      { modalItem = true, sellLabel = true })
-    hudBtn("modal_no", mx + mw - btnW2 - 16, btnY, btnW2, BTN_H, "Cancel",
-      function() State.openModal = nil end,
-      { modalItem = true })
-  end
 end
 
 local autoSaveAccum = 0
@@ -329,6 +325,7 @@ function Farm.start()
   Sounds.init()
   State.init()
   Save.load()
+  FlexLove.init({ baseScale = { width = 1920, height = 1080 } })
 end
 
 function Farm.shutdown()
@@ -339,6 +336,8 @@ function Farm.update(dt)
   Sim.update(dt)
   State.tickPopups()
   rebuildHudButtons()
+  Modals.syncTo(State.openModal)
+  FlexLove.update(dt)
   autoSaveAccum = autoSaveAccum + dt
   if autoSaveAccum >= C.SAVE_INTERVAL then
     autoSaveAccum = 0
@@ -801,6 +800,8 @@ local function drawHud()
       drawCenteredEmoji(fontEmojiBig, "🗑", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.saveIcon then
       drawCenteredEmoji(fontEmojiBig, "💾", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
+    elseif b.opts.bestiaryIcon then
+      drawCenteredEmoji(fontEmojiBig, C.BESTIARY_EMOJI, b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.clearIcon then
       drawCenteredEmoji(fontEmojiBig, "🔄", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.actionToggle then
@@ -856,48 +857,6 @@ local function drawHud()
   love.graphics.print("RMB: cancel mode.   MMB: queue nearest robot for tile.", C.HUD_X, helpY + 16)
   love.graphics.print("Action bar: stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
 
-  if State.openModal == "resetConfirm" then
-    love.graphics.setColor(0, 0, 0, 0.55)
-    love.graphics.rectangle("fill", 0, 0, 1920, 1080)
-    local mw, mh = 360, 150
-    local mx = math.floor((1920 - mw) * 0.5)
-    local my = math.floor((1080 - mh) * 0.5)
-    love.graphics.setColor(0.12, 0.12, 0.16, 1)
-    love.graphics.rectangle("fill", mx, my, mw, mh, 8, 8)
-    love.graphics.setColor(0.6, 0.6, 0.7, 1)
-    love.graphics.rectangle("line", mx, my, mw, mh, 8, 8)
-    love.graphics.setFont(fontUIBig)
-    love.graphics.setColor(1, 0.95, 0.6, 1)
-    love.graphics.printf("Reset save?", mx, my + 18, mw, "center")
-    love.graphics.setFont(fontUI)
-    love.graphics.setColor(0.8, 0.8, 0.85, 1)
-    love.graphics.printf("All progress will be deleted.", mx, my + 56, mw, "center")
-    for _, b in ipairs(hudButtons) do
-      if b.opts.modalItem then
-        local mxp, myp = love.mouse.getPosition()
-        local hover = mxp >= b.x and mxp <= b.x + b.w and myp >= b.y and myp <= b.y + b.h
-        local br, bg, bb
-        if b.opts.sellLabel then
-          br, bg, bb = 0.55, 0.28, 0.18
-        else
-          br, bg, bb = 0.22, 0.22, 0.28
-        end
-        if hover then
-          br = math.min(1, br + 0.12)
-          bg = math.min(1, bg + 0.12)
-          bb = math.min(1, bb + 0.12)
-        end
-        love.graphics.setColor(br, bg, bb, 1)
-        love.graphics.rectangle("fill", b.x, b.y, b.w, b.h, 6, 6)
-        love.graphics.setColor(0.6, 0.6, 0.7, 1)
-        love.graphics.rectangle("line", b.x, b.y, b.w, b.h, 6, 6)
-        love.graphics.setFont(fontUI)
-        love.graphics.setColor(1, 1, 1, 1)
-        local lw = fontUI:getWidth(b.label)
-        love.graphics.print(b.label, b.x + (b.w - lw) * 0.5, b.y + 10)
-      end
-    end
-  end
 end
 
 local function drawHudTooltip()
@@ -977,6 +936,8 @@ function Farm.draw()
   drawHud()
   drawCropTooltip()
   drawHudTooltip()
+  FlexLove.draw()
+  Modals.drawEmojiOverlay(fontEmoji, EMOJI_NATIVE)
 end
 
 local function pickHover(sx, sy)
@@ -1132,19 +1093,7 @@ local function handleMMB(tile)
 end
 
 function Farm.mousepressed(x, y, btn)
-  if State.openModal then
-    if btn == 1 then
-      for i = #hudButtons, 1, -1 do
-        local b = hudButtons[i]
-        if b.opts.modalItem and x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
-          Sounds.play(b.opts.sound or "click")
-          b.onClick()
-          return
-        end
-      end
-    end
-    return
-  end
+  if State.openModal then return end
 
   if btn == 1 then
     for i = #hudButtons, 1, -1 do
@@ -1191,7 +1140,11 @@ function Farm.mousepressed(x, y, btn)
   end
 end
 
-function Farm.wheelmoved(_, dy)
+function Farm.wheelmoved(dx, dy)
+  if State.openModal then
+    FlexLove.wheelmoved(dx, dy)
+    return
+  end
   local mx, my = love.mouse.getPosition()
   if mx >= robotViewport.x and mx <= robotViewport.x + robotViewport.w + 16
      and my >= robotViewport.y and my <= robotViewport.y + robotViewport.h then
@@ -1203,7 +1156,24 @@ function Farm.wheelmoved(_, dy)
 end
 
 function Farm.mousereleased() end
-function Farm.keypressed() end
+
+function Farm.keypressed(k, s, r)
+  if k == "escape" then
+    if State.openModal then
+      State.openModal = nil
+    else
+      love.event.quit()
+    end
+    return
+  end
+  if k == "b" then
+    if State.openModal == "bestiary" then State.openModal = nil
+    elseif not State.openModal then State.openModal = "bestiary" end
+    return
+  end
+  FlexLove.keypressed(k, s, r)
+end
+
 function Farm.keyreleased() end
 
 return Farm

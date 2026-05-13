@@ -111,6 +111,7 @@ function Save.save()
     _usedNames = State._usedNames,
     fertInventory = State.fertInventory,
     fertLevel = State.fertLevel,
+    discovered = State.discovered,
     seeds = snapshotSeeds(),
     robots = snapshotRobots(),
     tiles = snapshotTiles(),
@@ -138,6 +139,7 @@ function Save.load()
   State._usedNames = data._usedNames or {}
   State.fertInventory = data.fertInventory or {}
   State.fertLevel = data.fertLevel or {}
+  State.discovered = data.discovered or {}
   for _, k in ipairs(C.FERT_KEYS) do
     State.fertInventory[k] = State.fertInventory[k] or 0
     State.fertLevel[k] = State.fertLevel[k] or 1

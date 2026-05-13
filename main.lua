@@ -30,9 +30,6 @@ function love.mousemoved(x,y,dx,dy,t) Farm.mousemoved(x,y,dx,dy,t) end
 function love.mousepressed(x,y,b,t)   Farm.mousepressed(x,y,b,t) end
 function love.mousereleased(x,y,b,t)  Farm.mousereleased(x,y,b,t) end
 function love.wheelmoved(dx,dy)       Farm.wheelmoved(dx,dy) end
-function love.keypressed(k,s,r)
-  if k == "escape" then love.event.quit() end
-  Farm.keypressed(k,s,r)
-end
+function love.keypressed(k,s,r)        Farm.keypressed(k,s,r) end
 function love.keyreleased(k)          Farm.keyreleased(k) end
 function love.quit()                  Farm.shutdown() end

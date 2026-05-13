@@ -1,4 +1,4 @@
-return {
+local C = {
   GRID_W = 15,
   GRID_H = 11,
   TILE   = 92,
@@ -46,20 +46,20 @@ return {
   GROWTIME_TIER_VALUES = { 40, 30, 22, 16, 12, 8 },
 
   CROP_RECIPES = {
-    ["2+2"]  = { result = 3,  chance = 0.25 },
-    ["1+2"]  = { result = 5,  chance = 0.30 },
-    ["1+3"]  = { result = 8,  chance = 0.30 },
-    ["2+3"]  = { result = 4,  chance = 0.30 },
-    ["3+4"]  = { result = 7,  chance = 0.25 },
-    ["2+4"]  = { result = 10, chance = 0.25 },
-    ["1+5"]  = { result = 6,  chance = 0.25 },
-    ["3+8"]  = { result = 9,  chance = 0.25 },
-    ["4+8"]  = { result = 10, chance = 0.25 },
-    ["3+6"]  = { result = 11, chance = 0.25 },
-    ["9+10"] = { result = 12, chance = 0.20 },
-    ["7+11"] = { result = 12, chance = 0.20 },
-    ["1+4"]  = { result = 5,  chance = 0.20 },
-    ["5+6"]  = { result = 8,  chance = 0.20 },
+    { a="Carrot",     b="Carrot",     result="Cucumber",   chance=0.25 },
+    { a="Tomato",     b="Carrot",     result="Chili",      chance=0.30 },
+    { a="Tomato",     b="Cucumber",   result="Strawberry", chance=0.30 },
+    { a="Carrot",     b="Cucumber",   result="Corn",       chance=0.30 },
+    { a="Cucumber",   b="Corn",       result="Broccoli",   chance=0.25 },
+    { a="Carrot",     b="Corn",       result="Pineapple",  chance=0.25 },
+    { a="Tomato",     b="Chili",      result="Eggplant",   chance=0.25 },
+    { a="Cucumber",   b="Strawberry", result="Watermelon", chance=0.25 },
+    { a="Corn",       b="Strawberry", result="Pineapple",  chance=0.25 },
+    { a="Cucumber",   b="Eggplant",   result="Avocado",    chance=0.25 },
+    { a="Watermelon", b="Pineapple",  result="Coconut",    chance=0.20 },
+    { a="Broccoli",   b="Avocado",    result="Coconut",    chance=0.20 },
+    { a="Tomato",     b="Corn",       result="Chili",      chance=0.20 },
+    { a="Chili",      b="Eggplant",   result="Strawberry", chance=0.20 },
   },
 
   WORK_TIME = { Till=2.0, Water=1.5, Weed=1.5, Replant=1.0 },
@@ -99,6 +99,7 @@ return {
   STICK_EMOJI = "🪵",
   WEED_EMOJI  = "🌿",
   ROBOT_EMOJI = "🤖",
+  BESTIARY_EMOJI = "📖",
 
   TASK_GLYPH = {
     Idle    = "💤",
@@ -164,3 +165,30 @@ return {
   SAVE_FILE = "save.lua",
   SAVE_INTERVAL = 60,
 }
+
+-- Derived lookups: name → index, and recipe lookup by sorted-index key.
+-- Source of truth = CROP_RECIPES (names). Runtime uses indexes.
+C.CROP_INDEX = {}
+for i, crop in ipairs(C.CROPS) do
+  C.CROP_INDEX[crop.name] = i
+end
+
+C.RECIPE_LOOKUP = {}
+for ri, r in ipairs(C.CROP_RECIPES) do
+  local ai = assert(C.CROP_INDEX[r.a], "unknown crop name in recipe.a: " .. tostring(r.a))
+  local bi = assert(C.CROP_INDEX[r.b], "unknown crop name in recipe.b: " .. tostring(r.b))
+  local resIdx = assert(C.CROP_INDEX[r.result], "unknown crop name in recipe.result: " .. tostring(r.result))
+  local lo, hi = ai, bi
+  if lo > hi then lo, hi = hi, lo end
+  local key = lo .. "+" .. hi
+  C.RECIPE_LOOKUP[key] = {
+    result    = resIdx,
+    chance    = r.chance,
+    recipeIdx = ri,
+    aName     = r.a,
+    bName     = r.b,
+    resultName= r.result,
+  }
+end
+
+return C

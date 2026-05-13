@@ -48,6 +48,7 @@ function State.init()
   State.restrictMode = false
   State.openDropdown = nil
   State.openModal = nil
+  State.discovered = {}
 
   State.tiles = {}
   for y = 1, C.GRID_H do
@@ -314,6 +315,12 @@ end
 function State.toggleStick()
   if State.stickMode then State.stickMode = false
   else State.clearModes(); State.stickMode = true end
+end
+
+function State.recordDiscovery(recipeIdx)
+  if not recipeIdx then return end
+  State.discovered = State.discovered or {}
+  State.discovered[recipeIdx] = (State.discovered[recipeIdx] or 0) + 1
 end
 
 function State.tryUnlockRow(y)
