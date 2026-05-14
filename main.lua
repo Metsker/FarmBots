@@ -5,8 +5,6 @@ package.path = base .. "/libs/?.lua;"
             .. base .. "/modules/?/init.lua;"
             .. package.path
 
-require("se3")
-
 local isWeb = love.system.getOS() == "Web"
 local mcp = not isWeb and require("love_mcp") or nil
 local Farm = require("farm")

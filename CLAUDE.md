@@ -16,7 +16,7 @@ Love2D 11.5. No tests, no lint, no build — runs directly from source.
 ## Bootstrap
 
 1. `conf.lua` — 1920×1080 windowed, identity `farmbots`.
-2. `main.lua` — extends `package.path` with `libs/` and `modules/`, requires `se3` (exposes `SObject`, `SLoader`, `Class`, `Signal`, …) and `love_mcp` (dev tool, port 21110), then delegates Love callbacks to `Farm.*`. Also takes a `127.0.0.1:21199` socket lock to prevent double-launch.
+2. `main.lua` — extends `package.path` with `libs/` and `modules/`, requires `love_mcp` (dev tool, port 21110) on desktop, then delegates Love callbacks to `Farm.*`. On desktop it also takes a `127.0.0.1:21199` socket lock to prevent double-launch; both the lock and MCP are skipped on web (love.js) builds.
 3. `modules/farm.lua` — entry point. Owns drawing, HUD layout, input dispatch.
 
 ## Module split (`modules/farm/`)
@@ -51,12 +51,6 @@ any → wild   (shovel/dig toggle)
 ## Input model
 
 Toggle-based, not mode-based. Player clicks an action-bar button to activate a toggle (stick / fertilizer / shovel / restrict) or selects a crop from the inventory list, then LMB on a tile applies it. With no toggle active, LMB does the contextually-correct thing: harvest a ripe tile, plant the selected crop on a tilled tile. MMB queues the nearest robot for a tile. RMB cancels the active toggle/selection. `State.clearModes()` resets all toggles + crop selection.
-
-## SE3 engine
-
-`libs/se3/` is a bundled scene-graph engine — see `libs/se3/CLAUDE.md` and the global skill at `.claude/skills/love2d-se3/` for the full API. Current draw path uses Love2D primitives directly; SE3 is loaded but only its bootstrap runs. When adding scenes, FSM, reactive UI, or animated sprites, **read `libs/se3/docs/*.md` first**.
-
-Spine modules (`sespineplayer`/`seanimatedspine`/`sespineatlas`) were stripped. `vendor/sysl-text` is kept (required by `serichtext`). `seloader.lua` was patched to `pcall` the spine atlas import lazily.
 
 ## Emoji font caveat
 
