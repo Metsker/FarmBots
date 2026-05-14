@@ -1231,8 +1231,7 @@ local function handleLMB(tile)
       }
       tile.state = "growing"
       if State.cropCount(cropIdx, tier) <= 0 then
-        State.selectedCropIdx = nil
-        State.selectedCropTier = nil
+        State.advanceSelectionFrom(cropIdx, tier)
       end
       Sounds.play("plant")
       return

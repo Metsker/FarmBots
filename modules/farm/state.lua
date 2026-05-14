@@ -293,6 +293,42 @@ function State.toggleCrop(cropIdx, tier)
   end
 end
 
+function State.advanceSelectionFrom(cropIdx, tier)
+  local function stocked(c, t)
+    local byTier = State.crops[c]
+    return byTier and byTier[t] and byTier[t] > 0
+  end
+  local order = {}
+  for c = 1, #C.CROPS do
+    for t = #C.TIER_NAMES, 1, -1 do
+      order[#order + 1] = { c, t }
+    end
+  end
+  local pos
+  for i, entry in ipairs(order) do
+    if entry[1] == cropIdx and entry[2] == tier then pos = i; break end
+  end
+  if not pos then
+    State.selectedCropIdx = nil
+    State.selectedCropTier = nil
+    return
+  end
+  for i = pos + 1, #order do
+    if stocked(order[i][1], order[i][2]) then
+      State.selectedCropIdx, State.selectedCropTier = order[i][1], order[i][2]
+      return
+    end
+  end
+  for i = pos - 1, 1, -1 do
+    if stocked(order[i][1], order[i][2]) then
+      State.selectedCropIdx, State.selectedCropTier = order[i][1], order[i][2]
+      return
+    end
+  end
+  State.selectedCropIdx = nil
+  State.selectedCropTier = nil
+end
+
 function State.toggleDig()
   if State.digToggle then State.digToggle = false
   else State.clearModes(); State.digToggle = true end
