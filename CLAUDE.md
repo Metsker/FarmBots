@@ -52,9 +52,9 @@ any → wild   (shovel/dig toggle)
 
 Toggle-based, not mode-based. Player clicks an action-bar button to activate a toggle (stick / fertilizer / shovel / restrict) or selects a crop from the inventory list, then LMB on a tile applies it. With no toggle active, LMB does the contextually-correct thing: harvest a ripe tile, plant the selected crop on a tilled tile. MMB queues the nearest robot for a tile. RMB cancels the active toggle/selection. `State.clearModes()` resets all toggles + crop selection.
 
-## Emoji font caveat
+## Emoji font
 
-`assets/fonts/NotoColorEmoji.ttf` is a **CBDT bitmap font** — FreeType only accepts its native strike size `EMOJI_NATIVE = 109`. Loaded once in `farm.lua` and scaled at draw time. Any other load size errors with `FT_Set_Pixel_Sizes failed`. Don't change.
+`assets/fonts/NotoEmoji-Regular.ttf` is a monochrome TrueType outline emoji font. Loaded once at `EMOJI_NATIVE = 109` in `farm.lua` and scaled at draw time. Outlines render solid black, then `drawCenteredEmojiTinted` colours them per glyph — so every emoji is a single tinted shape, not multicolour. (Color emoji via `NotoColorEmoji.ttf` was dropped because it's a CBDT bitmap font and love.js's bundled FreeType lacks PNG/CBDT support, failing with `FT_Load_Glyph 0x07` on web.)
 
 The default Love2D UI font (TTF outlines) cannot render emoji glyphs — emoji go through `fontEmoji*`, text through `fontUI*`.
 

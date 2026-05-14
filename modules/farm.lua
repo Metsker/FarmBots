@@ -15,11 +15,9 @@ local fontUI
 local fontUIBig
 local fontUISmall
 
--- NotoColorEmoji is a CBDT bitmap font: FreeType only supports its native
--- strike size (109px). We load it once at 109 and scale via draw transforms.
 local EMOJI_NATIVE = 109
 local function loadFonts()
-  local rawFont = love.graphics.newFont("assets/fonts/NotoColorEmoji.ttf", EMOJI_NATIVE)
+  local rawFont = love.graphics.newFont("assets/fonts/NotoEmoji-Regular.ttf", EMOJI_NATIVE)
   fontEmoji     = rawFont
   fontEmojiBig  = rawFont
   fontEmojiHuge = rawFont
