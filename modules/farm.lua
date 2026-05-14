@@ -494,7 +494,7 @@ local function drawPopups()
 end
 
 local function tileFill(t)
-  if t.state == "wild"   then return 0.30, 0.22, 0.16 end
+  if t.state == "wild"   then return 0.28, 0.50, 0.22 end
   if t.state == "tilled" then return 0.45, 0.30, 0.18 end
   if t.state == "growing" or t.state == "ripe" then return 0.38, 0.27, 0.17 end
   if t.state == "stick"  then return 0.42, 0.28, 0.18 end
