@@ -5,8 +5,11 @@ local Genetics = require("farm.genetics")
 local Sounds = require("farm.sounds")
 local Save = require("farm.save")
 local Modals = require("farm.modals")
+local Version = require("version")
 
 local Farm = {}
+
+local versionLabel = string.format("build %s %s", Version.sha or "?", Version.date or "?")
 
 local fontEmoji
 local fontEmojiBig
@@ -1107,6 +1110,14 @@ local function drawHudTooltip()
   end
 end
 
+local function drawVersion()
+  love.graphics.setFont(fontUISmall)
+  love.graphics.setColor(0.65, 0.65, 0.65, 0.7)
+  local w = fontUISmall:getWidth(versionLabel)
+  local h = fontUISmall:getHeight()
+  love.graphics.print(versionLabel, 1920 - w - 6, 1080 - h - 4)
+end
+
 function Farm.draw()
   love.graphics.setCanvas(gameCanvas)
   love.graphics.clear(0.08, 0.10, 0.08, 1)
@@ -1117,6 +1128,7 @@ function Farm.draw()
   drawCropTooltip()
   drawHudTooltip()
   Modals.draw()
+  drawVersion()
   love.graphics.setCanvas()
 
   love.graphics.clear(0, 0, 0, 1)
@@ -1231,7 +1243,7 @@ local function handleMMB(tile)
     needed = "Weed"
   elseif tile.state == "wild" then
     needed = "Till"
-  elseif tile.state == "growing" and tile.crop and tile.crop.water < C.WATER_REFILL_GATE then
+  elseif tile.state == "growing" and tile.crop then
     needed = "Water"
   end
   if not needed then

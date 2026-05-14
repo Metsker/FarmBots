@@ -117,7 +117,7 @@ local C = {
   WATER_DRAIN_PER_SEC = 1 / 10,
   WATER_MAX           = 1.0,
   WATER_GROW_GATE     = 0.05,
-  WATER_REFILL_GATE   = 0.35,
+  WATER_REFILL_GATE   = 0.5,
 
   MUTATION_RATE = 0.03,
 

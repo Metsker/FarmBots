@@ -7,7 +7,7 @@ local Sim = {}
 
 local function tileMatchesTask(t, task)
   if task == "Till" then return t.state == "wild"
-  elseif task == "Water" then return t.state == "growing" and t.crop and t.crop.water < C.WATER_REFILL_GATE
+  elseif task == "Water" then return t.state == "growing" and t.crop and t.crop.water <= C.WATER_REFILL_GATE
   elseif task == "Weed" then return t.weed and true or false
   elseif task == "Replant" then return t.state == "ripe" and not t.restrict
   end
@@ -71,7 +71,7 @@ local function neededTaskFor(tile)
   if not tile then return nil end
   if tile.weed then return "Weed" end
   if tile.state == "wild" then return "Till" end
-  if tile.state == "growing" and tile.crop and tile.crop.water < C.WATER_REFILL_GATE then return "Water" end
+  if tile.state == "growing" and tile.crop then return "Water" end
   if tile.state == "ripe" and not tile.restrict then return "Replant" end
   return nil
 end
