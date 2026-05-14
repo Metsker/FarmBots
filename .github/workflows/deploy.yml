@@ -48,6 +48,7 @@ jobs:
 
       - name: Assemble web build
         run: |
+          SHA=$(git rev-parse --short HEAD)
           mkdir -p web_build/11.5 web_build/lua
           cp /tmp/lovejs/player.js web_build/
           cp /tmp/lovejs/style.css web_build/
@@ -59,7 +60,7 @@ jobs:
           # so SharedArrayBuffer is available for the 2dengine player.
           curl -sL https://raw.githubusercontent.com/gzuidhof/coi-serviceworker/master/coi-serviceworker.js \
             -o web_build/coi-serviceworker.js
-          cat > web_build/index.html <<'HTML'
+          cat > web_build/index.html <<HTML
           <!doctype html>
           <html lang="en-us">
             <head>
@@ -78,7 +79,7 @@ jobs:
                 // otherwise the partially-loaded love.js races the reload.
                 if (window.crossOriginIsolated) {
                   var s = document.createElement('script');
-                  s.src = 'player.js?g=farmbots.love&v=11.5';
+                  s.src = 'player.js?g=farmbots.love%3Fv%3D${SHA}&v=11.5';
                   document.body.appendChild(s);
                 }
               </script>
