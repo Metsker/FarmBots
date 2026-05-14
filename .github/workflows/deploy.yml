@@ -23,12 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install love.js
-        run: npm install -g love.js
+      - name: Fetch 2dengine love.js
+        run: git clone --depth 1 https://github.com/2dengine/love.js.git /tmp/lovejs
 
       - name: Build .love archive
         run: |
@@ -43,8 +39,45 @@ jobs:
             -x "web_build/*" \
             -x "dist/*"
 
-      - name: Generate web build
-        run: npx love.js -c -m 134217728 -t "FarmBots" farmbots.love web_build
+      - name: Assemble web build
+        run: |
+          mkdir -p web_build/11.5 web_build/lua
+          cp /tmp/lovejs/player.js web_build/
+          cp /tmp/lovejs/style.css web_build/
+          cp /tmp/lovejs/11.5/love.js web_build/11.5/
+          cp /tmp/lovejs/11.5/love.wasm web_build/11.5/
+          cp /tmp/lovejs/lua/*.lua web_build/lua/
+          mv farmbots.love web_build/
+          # GitHub Pages cannot set COOP/COEP headers; the service worker patches them
+          # so SharedArrayBuffer is available for the 2dengine player.
+          curl -sL https://raw.githubusercontent.com/gzuidhof/coi-serviceworker/master/coi-serviceworker.js \
+            -o web_build/coi-serviceworker.js
+          cat > web_build/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en-us">
+            <head>
+              <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+              <title>FarmBots</title>
+              <link rel="stylesheet" href="style.css">
+            </head>
+            <body>
+              <canvas id="canvas"></canvas>
+              <div id="spinner" class="pending"></div>
+              <script src="coi-serviceworker.js"></script>
+              <script>
+                // coi-serviceworker registers a SW that adds COOP/COEP and reloads the page
+                // once on first visit. Only run the player after isolation is confirmed,
+                // otherwise the partially-loaded love.js races the reload.
+                if (window.crossOriginIsolated) {
+                  var s = document.createElement('script');
+                  s.src = 'player.js?g=farmbots.love&v=11.5';
+                  document.body.appendChild(s);
+                }
+              </script>
+            </body>
+          </html>
+          HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
