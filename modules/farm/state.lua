@@ -1,5 +1,4 @@
 local C = require("farm.constants")
-local Genetics = require("farm.genetics")
 
 local State = {}
 
@@ -14,17 +13,7 @@ local function newTile(x, y)
   }
 end
 
-local function newSeed(genome, label)
-  return {
-    id = State and State._nextSeedId or 1,
-    genome = genome,
-    pheno = Genetics.phenotype(genome),
-    label = label,
-  }
-end
-
 function State.init()
-  State._nextSeedId = 1
   State.money = 100
   State.sticks = 2
   State.digToggle = false
@@ -32,10 +21,11 @@ function State.init()
   State.weedTimer = C.WEED_SPAWN_MAX_INTERVAL
   State.hoverEdge = nil
   State.hoverTile = nil
-  State.selectedSeedId = nil
+  State.selectedCropIdx = nil
+  State.selectedCropTier = nil
   State.popups = {}
   State.unlockedRows = C.STARTING_ROWS
-  State.seedScroll = 0
+  State.cropScroll = 0
   State.robotScroll = 0
   State.fertInventory = {}
   State.fertLevel = {}
@@ -60,9 +50,7 @@ function State.init()
     end
   end
 
-  State.seeds = {}
-  State.cropInventory = {}
-  State.invTab = "seeds"
+  State.crops = {}
 
   State._usedNames = {}
   State.robots = {
@@ -168,10 +156,6 @@ function State.tickPopups()
   end
 end
 
-function State.nextSeedCost()
-  return math.floor(C.SEED_BASE_COST * (C.SEED_COST_EXP ^ (#State.seeds)))
-end
-
 function State.tileAt(tx, ty)
   if tx < 1 or tx > C.GRID_W or ty < 1 or ty > C.GRID_H then return nil end
   return State.tiles[ty][tx]
@@ -192,44 +176,6 @@ function State.screenToTile(sx, sy)
   local ty = math.floor((sy - C.GRID_OY) / C.TILE) + 1
   if tx < 1 or tx > C.GRID_W or ty < 1 or ty > C.GRID_H then return nil end
   return tx, ty
-end
-
-function State.addSeed(genome, label)
-  State._nextSeedId = State._nextSeedId + 1
-  State.seeds[#State.seeds + 1] = {
-    id = State._nextSeedId,
-    genome = genome,
-    pheno = Genetics.phenotype(genome),
-    label = label,
-  }
-end
-
-function State.removeSeed(id)
-  for i, s in ipairs(State.seeds) do
-    if s.id == id then table.remove(State.seeds, i) return s end
-  end
-  return nil
-end
-
-function State.sellSeed(id)
-  for i, s in ipairs(State.seeds) do
-    if s.id == id then
-      local sellVal = math.max(1, math.floor(s.pheno.yield * 0.1))
-      State.money = State.money + sellVal
-      State.addPopup(C.HUD_X + 50, C.HUD_OY + 30, "+$" .. sellVal)
-      table.remove(State.seeds, i)
-      return sellVal
-    end
-  end
-  return 0
-end
-
-function State.selectedSeed()
-  if not State.selectedSeedId then return nil end
-  for _, s in ipairs(State.seeds) do
-    if s.id == State.selectedSeedId then return s end
-  end
-  return nil
 end
 
 function State.nextRobotCost()
@@ -309,7 +255,8 @@ function State.clearModes()
   State.fertMode = nil
   State.stickMode = false
   State.restrictMode = false
-  State.selectedSeedId = nil
+  State.selectedCropIdx = nil
+  State.selectedCropTier = nil
 end
 
 function State.toggleRestrict()
@@ -317,9 +264,15 @@ function State.toggleRestrict()
   else State.clearModes(); State.restrictMode = true end
 end
 
-function State.toggleSeed(id)
-  if State.selectedSeedId == id then State.selectedSeedId = nil
-  else State.clearModes(); State.selectedSeedId = id end
+function State.toggleCrop(cropIdx, tier)
+  if State.selectedCropIdx == cropIdx and State.selectedCropTier == tier then
+    State.selectedCropIdx = nil
+    State.selectedCropTier = nil
+  else
+    State.clearModes()
+    State.selectedCropIdx = cropIdx
+    State.selectedCropTier = tier
+  end
 end
 
 function State.toggleDig()
@@ -343,17 +296,23 @@ function State.recordDiscovery(recipeIdx)
   State.discovered[recipeIdx] = (State.discovered[recipeIdx] or 0) + 1
 end
 
-function State.addCropToInv(cropIdx, tier)
-  local byCrop = State.cropInventory[cropIdx]
+function State.addCrop(cropIdx, tier)
+  local byCrop = State.crops[cropIdx]
   if not byCrop then
     byCrop = {}
-    State.cropInventory[cropIdx] = byCrop
+    State.crops[cropIdx] = byCrop
   end
   byCrop[tier] = (byCrop[tier] or 0) + 1
 end
 
+function State.cropCount(cropIdx, tier)
+  local byCrop = State.crops[cropIdx]
+  if not byCrop then return 0 end
+  return byCrop[tier] or 0
+end
+
 function State.cropCountAtTier(cropIdx, minTier)
-  local byCrop = State.cropInventory[cropIdx]
+  local byCrop = State.crops[cropIdx]
   if not byCrop then return 0 end
   local total = 0
   for t, n in pairs(byCrop) do
@@ -363,7 +322,7 @@ function State.cropCountAtTier(cropIdx, minTier)
 end
 
 local function takeOneFrom(cropIdx, minTier)
-  local byCrop = State.cropInventory[cropIdx]
+  local byCrop = State.crops[cropIdx]
   if not byCrop then return false end
   local bestT
   for t, n in pairs(byCrop) do
@@ -377,8 +336,16 @@ local function takeOneFrom(cropIdx, minTier)
   return true
 end
 
+function State.takeCrop(cropIdx, tier)
+  local byCrop = State.crops[cropIdx]
+  if not byCrop or (byCrop[tier] or 0) <= 0 then return false end
+  byCrop[tier] = byCrop[tier] - 1
+  if byCrop[tier] <= 0 then byCrop[tier] = nil end
+  return true
+end
+
 function State.sellOne(cropIdx, tier)
-  local byCrop = State.cropInventory[cropIdx]
+  local byCrop = State.crops[cropIdx]
   if not byCrop or (byCrop[tier] or 0) <= 0 then return 0 end
   local cropInfo = C.CROPS[cropIdx]
   local mult = cropInfo.yieldMult or 1
@@ -388,16 +355,6 @@ function State.sellOne(cropIdx, tier)
   State.money = State.money + price
   State.addPopup(C.HUD_X + 50, C.HUD_OY + 30, "+$" .. price)
   return price
-end
-
-function State.seedOne(cropIdx, tier)
-  local byCrop = State.cropInventory[cropIdx]
-  if not byCrop or (byCrop[tier] or 0) <= 0 then return false end
-  byCrop[tier] = byCrop[tier] - 1
-  if byCrop[tier] <= 0 then byCrop[tier] = nil end
-  local Genetics = require("farm.genetics")
-  State.addSeed(Genetics.baseGenome(cropIdx, tier), C.CROPS[cropIdx].name)
-  return true
 end
 
 function State.rowUnlockReqs(y)

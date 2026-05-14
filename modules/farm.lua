@@ -29,8 +29,8 @@ local function loadFonts()
 end
 
 local hudButtons = {}
-local seedViewport = { x = 0, y = 0, w = 0, h = 0 }
-local seedScrollMax = 0
+local cropViewport = { x = 0, y = 0, w = 0, h = 0 }
+local cropScrollMax = 0
 local robotViewport = { x = 0, y = 0, w = 0, h = 0 }
 local robotScrollMax = 0
 
@@ -54,7 +54,7 @@ local BTN_GAP = 6
 local function btnW(label, opts)
   opts = opts or {}
   local textW = fontUI and fontUI:getWidth(label or "") or 60
-  if opts.seedBuy or opts.robotBuy or opts.stickLabel or opts.stickBuy
+  if opts.cropBuy or opts.robotBuy or opts.stickLabel or opts.stickBuy
     or opts.fertApply or opts.fertBuy or opts.stickApply then
     return BTN_EMOJI_LEAD + textW + BTN_PAD
   end
@@ -234,95 +234,45 @@ local function rebuildHudButtons()
     ::continue_robot::
   end
 
-  local tabRowY = robotsTop + robotViewportH + 14
-  local tabH = 28
-  do
-    local seedCount = #State.seeds
-    local cropCount = 0
-    for _, byTier in pairs(State.cropInventory or {}) do
-      for _, n in pairs(byTier) do cropCount = cropCount + n end
-    end
-    local halfW = math.floor((hw - 60 - BTN_GAP) / 2)
-    hudBtn("tab_seeds", hx, tabRowY, halfW, tabH,
-      "Seeds (" .. seedCount .. ")",
-      function() State.invTab = "seeds" end,
-      { selected = State.invTab == "seeds", centerLabel = true })
-    hudBtn("tab_crops", hx + halfW + BTN_GAP, tabRowY, halfW, tabH,
-      "Crops (" .. cropCount .. ")",
-      function() State.invTab = "crops" end,
-      { selected = State.invTab == "crops", centerLabel = true })
-  end
-
-  local seedTop = tabRowY + tabH + 6
-  local seedBottomLimit = buyY - 14
-  local viewportH = math.max(60, seedBottomLimit - seedTop)
-  seedViewport = { x = hx, y = seedTop, w = hw - 60, h = viewportH }
+  local invTop = robotsTop + robotViewportH + 14
+  local invBottomLimit = buyY - 14
+  local viewportH = math.max(60, invBottomLimit - invTop)
+  cropViewport = { x = hx, y = invTop, w = hw - 60, h = viewportH }
   local rowH = 36
-  local activeTab = State.invTab or "seeds"
-  if activeTab == "seeds" then
-    local contentH = #State.seeds * rowH
-    local scrollMax = math.max(0, contentH - viewportH)
-    if State.seedScroll > scrollMax then State.seedScroll = scrollMax end
-    if State.seedScroll < 0 then State.seedScroll = 0 end
-    seedScrollMax = scrollMax
-    local sellBtnW = 76
-    local selBtnW = (hw - 60) - sellBtnW - 4
-    for i = 1, #State.seeds do
-      local s = State.seeds[i]
-      local rowY = seedTop + (i - 1) * rowH - State.seedScroll
-      if rowY >= seedTop and rowY + 32 <= seedTop + viewportH then
-        hudBtn("seed_" .. s.id, hx, rowY, selBtnW, 32,
-          string.format("Tier=%s", s.pheno.tierLabel),
-          function() State.toggleSeed(s.id) end,
-          { selected = (State.selectedSeedId == s.id), emojiIndex = 2 })
-        local sellVal = math.max(1, math.floor(s.pheno.yield * 0.1))
-        hudBtn("sell_" .. s.id, hx + selBtnW + 4, rowY, sellBtnW, 32,
-          "Sell $" .. sellVal,
-          function() State.sellSeed(s.id) end,
-          { sellLabel = true, sound = "sell", centerLabel = true })
-      end
-    end
-  else
-    -- Crops tab: flatten cropInventory into a sorted list of (crop, tier, count)
-    local rows = {}
-    for cropIdx = 1, #C.CROPS do
-      local byTier = State.cropInventory[cropIdx]
-      if byTier then
-        for tier = #C.TIER_NAMES, 1, -1 do
-          local n = byTier[tier]
-          if n and n > 0 then
-            rows[#rows + 1] = { crop = cropIdx, tier = tier, count = n }
-          end
+  local rows = {}
+  for cropIdx = 1, #C.CROPS do
+    local byTier = State.crops[cropIdx]
+    if byTier then
+      for tier = #C.TIER_NAMES, 1, -1 do
+        local n = byTier[tier]
+        if n and n > 0 then
+          rows[#rows + 1] = { crop = cropIdx, tier = tier, count = n }
         end
       end
     end
-    local contentH = #rows * rowH
-    local scrollMax = math.max(0, contentH - viewportH)
-    if State.seedScroll > scrollMax then State.seedScroll = scrollMax end
-    if State.seedScroll < 0 then State.seedScroll = 0 end
-    seedScrollMax = scrollMax
-    local seedBtnW = 56
-    local sellBtnW = 90
-    local infoBtnW = (hw - 60) - seedBtnW - sellBtnW - 8
-    for i, row in ipairs(rows) do
-      local rowY = seedTop + (i - 1) * rowH - State.seedScroll
-      if rowY >= seedTop and rowY + 32 <= seedTop + viewportH then
-        local cropInfo = C.CROPS[row.crop]
-        local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
-        local idCrop = row.crop .. "_" .. row.tier
-        hudBtn("invc_" .. idCrop, hx, rowY, infoBtnW, 32,
-          "",
-          function() end,
-          { cropRow = row })
-        hudBtn("invc_sell_" .. idCrop, hx + infoBtnW + 4, rowY, sellBtnW, 32,
-          "Sell $" .. price,
-          function() State.sellOne(row.crop, row.tier) end,
-          { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true })
-        hudBtn("invc_seed_" .. idCrop, hx + infoBtnW + sellBtnW + 8, rowY, seedBtnW, 32,
-          "Seed",
-          function() State.seedOne(row.crop, row.tier) end,
-          { sound = "buy", holdRepeat = true, centerLabel = true })
-      end
+  end
+  local contentH = #rows * rowH
+  local scrollMax = math.max(0, contentH - viewportH)
+  if State.cropScroll > scrollMax then State.cropScroll = scrollMax end
+  if State.cropScroll < 0 then State.cropScroll = 0 end
+  cropScrollMax = scrollMax
+  local sellBtnW = 90
+  local infoBtnW = (hw - 60) - sellBtnW - 4
+  for i, row in ipairs(rows) do
+    local rowY = invTop + (i - 1) * rowH - State.cropScroll
+    if rowY >= invTop and rowY + 32 <= invTop + viewportH then
+      local cropInfo = C.CROPS[row.crop]
+      local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
+      local idCrop = row.crop .. "_" .. row.tier
+      local selected = (State.selectedCropIdx == row.crop and State.selectedCropTier == row.tier)
+      hudBtn("invc_" .. idCrop, hx, rowY, infoBtnW, 32,
+        "",
+        function() State.toggleCrop(row.crop, row.tier) end,
+        { cropRow = row, selected = selected })
+      hudBtn("invc_sell_" .. idCrop, hx + infoBtnW + 4, rowY, sellBtnW, 32,
+        "Sell $" .. price,
+        function() State.sellOne(row.crop, row.tier) end,
+        { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true })
     end
   end
 
@@ -359,31 +309,29 @@ local function rebuildHudButtons()
     local tCost = C.CROPS[1].buyCost
     local canBuyTomato = State.money >= tCost
     local tLabel = "Buy $" .. tCost
-    local tW = btnW(tLabel, { seedBuy = 1 })
+    local tW = btnW(tLabel, { cropBuy = 1 })
     hudBtn("buy_tomato", cursorX, cropsY, tW, BTN_H, tLabel,
       function()
         if canBuyTomato then
           State.money = State.money - tCost
-          local g = require("farm.genetics").baseGenome(1, 1)
-          State.addSeed(g, "Tomato")
+          State.addCrop(1, 1)
         end
       end,
-      { disabled = not canBuyTomato, seedBuy = 1, sound = "buy" })
+      { disabled = not canBuyTomato, cropBuy = 1, sound = "buy" })
     cursorX = cursorX + tW + BTN_GAP
 
     local cCost = C.CROPS[2].buyCost
     local canBuyCarrot = State.money >= cCost
     local cLabel = "Buy $" .. cCost
-    local cW = btnW(cLabel, { seedBuy = 2 })
+    local cW = btnW(cLabel, { cropBuy = 2 })
     hudBtn("buy_carrot", cursorX, cropsY, cW, BTN_H, cLabel,
       function()
         if canBuyCarrot then
           State.money = State.money - cCost
-          local g = require("farm.genetics").baseGenome(2, 1)
-          State.addSeed(g, "Carrot")
+          State.addCrop(2, 1)
         end
       end,
-      { disabled = not canBuyCarrot, seedBuy = 2, sound = "buy" })
+      { disabled = not canBuyCarrot, cropBuy = 2, sound = "buy" })
   end
 
   for i, key in ipairs(C.FERT_KEYS) do
@@ -771,7 +719,7 @@ local function drawGrid()
       cr, cg, cb, ca = 0.4, 0.9, 0.4, 0.35
     elseif t.state == "ripe" then
       cr, cg, cb, ca = 0.4, 0.9, 0.4, 0.4
-    elseif t.state == "tilled" and State.selectedSeed() then
+    elseif t.state == "tilled" and State.selectedCropIdx then
       cr, cg, cb, ca = 0.4, 0.9, 0.4, 0.3
     else
       cr, cg, cb, ca = 0.5, 0.5, 0.5, 0.12
@@ -900,8 +848,12 @@ local function drawHud()
   love.graphics.print(string.format("$%d", State.money), C.HUD_X, C.HUD_OY)
   love.graphics.setFont(fontUI)
   love.graphics.setColor(0.7, 0.7, 0.8, 1)
-  love.graphics.print(string.format("t=%.1fs  seeds=%d  robots=%d/%d  weeds_in=%.0fs",
-    State.time, #State.seeds, #State.robots, C.ROBOT_CAP, State.weedTimer),
+  local cropTotal = 0
+  for _, byTier in pairs(State.crops) do
+    for _, n in pairs(byTier) do cropTotal = cropTotal + n end
+  end
+  love.graphics.print(string.format("t=%.1fs  crops=%d  robots=%d/%d  weeds_in=%.0fs",
+    State.time, cropTotal, #State.robots, C.ROBOT_CAP, State.weedTimer),
     C.HUD_X, C.HUD_OY + 44)
 
   local mxh, myh = love.mouse.getPosition()
@@ -939,32 +891,7 @@ local function drawHud()
 
     love.graphics.setFont(fontUI)
     love.graphics.setColor(1, 1, 1, 1)
-    if b.opts.emojiIndex then
-      local seedId = tonumber((b.id:gsub("seed_", "")))
-      local seed
-      for _, s in ipairs(State.seeds) do if s.id == seedId then seed = s break end end
-      if seed then
-        love.graphics.setFont(fontUI)
-        local emojiScale = 28 / EMOJI_NATIVE
-        local emojiW = fontEmojiBig:getWidth(seed.pheno.emoji) * emojiScale
-        local labelL = "Tier="
-        local labelR = seed.pheno.tierLabel
-        local gap = 8
-        local labelLW = fontUI:getWidth(labelL)
-        local labelRW = fontUI:getWidth(labelR)
-        local totalW = emojiW + gap + labelLW + labelRW
-        local tx = b.x + (b.w - totalW) * 0.5
-        local ty = b.y + (b.h - fontUI:getHeight()) * 0.5
-        drawCenteredEmojiTinted(fontEmojiBig, seed.pheno.emoji, tx + emojiW * 0.5, b.y + b.h * 0.5, emojiScale, seed.pheno.tint)
-        tx = tx + emojiW + gap
-        love.graphics.setFont(fontUI)
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(labelL, tx, ty)
-        local tc = C.TIER_COLORS[seed.pheno.tier] or { 1, 1, 1 }
-        love.graphics.setColor(tc[1], tc[2], tc[3], 1)
-        love.graphics.print(labelR, tx + labelLW, ty)
-      end
-    elseif b.opts.cropRow then
+    if b.opts.cropRow then
       local row = b.opts.cropRow
       local cropInfo = C.CROPS[row.crop]
       love.graphics.setFont(fontUI)
@@ -996,8 +923,8 @@ local function drawHud()
       love.graphics.setFont(fontUI)
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(b.label, b.x + 44, b.y + 10)
-    elseif b.opts.seedBuy then
-      local crop = C.CROPS[b.opts.seedBuy]
+    elseif b.opts.cropBuy then
+      local crop = C.CROPS[b.opts.cropBuy]
       drawCenteredEmojiTinted(fontEmojiBig, crop.emoji, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE, crop.color)
       love.graphics.setFont(fontUI)
       love.graphics.setColor(1, 1, 1, 1)
@@ -1064,14 +991,23 @@ local function drawHud()
     end
   end
 
-  if seedScrollMax > 0 then
-    local barX = seedViewport.x + seedViewport.w + 8
-    local barY = seedViewport.y
-    local barH = seedViewport.h
+  do
+    love.graphics.setColor(0.7, 0.7, 0.8, 1)
+    for _, b in ipairs(hudButtons) do
+      if b.opts.cropRow then
+        love.graphics.rectangle("fill", cropViewport.x, b.y + b.h + 1, cropViewport.w, 2)
+      end
+    end
+  end
+
+  if cropScrollMax > 0 then
+    local barX = cropViewport.x + cropViewport.w + 8
+    local barY = cropViewport.y
+    local barH = cropViewport.h
     love.graphics.setColor(0.15, 0.15, 0.18, 1)
     love.graphics.rectangle("fill", barX, barY, 5, barH, 2, 2)
-    local thumbH = math.max(20, barH * (barH / (barH + seedScrollMax)))
-    local thumbY = barY + (State.seedScroll / seedScrollMax) * (barH - thumbH)
+    local thumbH = math.max(20, barH * (barH / (barH + cropScrollMax)))
+    local thumbY = barY + (State.cropScroll / cropScrollMax) * (barH - thumbH)
     love.graphics.setColor(0.55, 0.55, 0.65, 1)
     love.graphics.rectangle("fill", barX, thumbY, 5, thumbH, 2, 2)
   end
@@ -1091,7 +1027,7 @@ local function drawHud()
   local helpY = 1080 - 60
   love.graphics.setFont(fontUISmall)
   love.graphics.setColor(0.55, 0.55, 0.65, 1)
-  love.graphics.print("LMB: harvest, plant selected seed, or use active action.", C.HUD_X, helpY)
+  love.graphics.print("LMB: harvest, plant selected crop, or use active action.", C.HUD_X, helpY)
   love.graphics.print("RMB: cancel mode.   MMB: queue nearest robot for tile.", C.HUD_X, helpY + 16)
   love.graphics.print("Action bar: stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
 
@@ -1231,7 +1167,7 @@ local function handleLMB(tile)
   end
   if State.digToggle then
     if tile.crop then
-      State.addSeed(Genetics.cloneGenome(tile.crop.genome), tile.crop.pheno.name)
+      State.addCrop(tile.crop.pheno.cropIndex, tile.crop.pheno.tier)
       tile.crop = nil
       tile.state = "tilled"
       Sounds.play("click")
@@ -1253,25 +1189,20 @@ local function handleLMB(tile)
     return
   end
   if tile.state == "tilled" then
-    local seed = State.selectedSeed()
-    if seed then
-      local idx
-      for i, s in ipairs(State.seeds) do
-        if s.id == seed.id then idx = i; break end
-      end
+    local cropIdx = State.selectedCropIdx
+    local tier = State.selectedCropTier
+    if cropIdx and tier and State.takeCrop(cropIdx, tier) then
+      local genome = Genetics.baseGenome(cropIdx, tier)
       tile.crop = {
-        genome = seed.genome,
-        pheno  = Genetics.phenotype(seed.genome),
+        genome = genome,
+        pheno  = Genetics.phenotype(genome),
         growth = 0,
         water  = 1.0,
       }
       tile.state = "growing"
-      State.removeSeed(seed.id)
-      if idx and #State.seeds > 0 then
-        local nextIdx = math.min(idx, #State.seeds)
-        State.selectedSeedId = State.seeds[nextIdx].id
-      else
-        State.selectedSeedId = nil
+      if State.cropCount(cropIdx, tier) <= 0 then
+        State.selectedCropIdx = nil
+        State.selectedCropTier = nil
       end
       Sounds.play("plant")
       return
@@ -1281,7 +1212,7 @@ local function handleLMB(tile)
 end
 
 local function handleRMB(tile)
-  if State.stickMode or State.fertMode or State.digToggle then
+  if State.stickMode or State.fertMode or State.digToggle or State.restrictMode or State.selectedCropIdx then
     State.clearModes()
     return
   end
@@ -1395,9 +1326,9 @@ function Farm.wheelmoved(dx, dy)
   if mx >= robotViewport.x and mx <= robotViewport.x + robotViewport.w + 16
      and my >= robotViewport.y and my <= robotViewport.y + robotViewport.h then
     State.robotScroll = math.max(0, math.min(robotScrollMax, State.robotScroll - dy * 50))
-  elseif mx >= seedViewport.x and mx <= seedViewport.x + seedViewport.w + 16
-     and my >= seedViewport.y and my <= seedViewport.y + seedViewport.h then
-    State.seedScroll = math.max(0, math.min(seedScrollMax, State.seedScroll - dy * 36))
+  elseif mx >= cropViewport.x and mx <= cropViewport.x + cropViewport.w + 16
+     and my >= cropViewport.y and my <= cropViewport.y + cropViewport.h then
+    State.cropScroll = math.max(0, math.min(cropScrollMax, State.cropScroll - dy * 36))
   end
 end
 

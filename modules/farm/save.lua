@@ -72,14 +72,6 @@ local function snapshotTiles()
   return out
 end
 
-local function snapshotSeeds()
-  local out = {}
-  for _, s in ipairs(State.seeds) do
-    out[#out + 1] = { id = s.id, g = s.genome, l = s.label }
-  end
-  return out
-end
-
 local function snapshotRobots()
   local out = {}
   for _, r in ipairs(State.robots) do
@@ -109,14 +101,11 @@ function Save.save()
     time = State.time,
     weedTimer = State.weedTimer,
     unlockedRows = State.unlockedRows,
-    _nextSeedId = State._nextSeedId,
     _usedNames = State._usedNames,
     fertInventory = State.fertInventory,
     fertLevel = State.fertLevel,
     discovered = State.discovered,
-    cropInventory = State.cropInventory,
-    invTab = State.invTab,
-    seeds = snapshotSeeds(),
+    crops = State.crops,
     robots = snapshotRobots(),
     tiles = snapshotTiles(),
   }
@@ -143,26 +132,14 @@ function Save.load()
   State.time = data.time or 0
   State.weedTimer = data.weedTimer or C.WEED_SPAWN_MAX_INTERVAL
   State.unlockedRows = data.unlockedRows or C.STARTING_ROWS
-  State._nextSeedId = data._nextSeedId or 1
   State._usedNames = data._usedNames or {}
   State.fertInventory = data.fertInventory or {}
   State.fertLevel = data.fertLevel or {}
   State.discovered = data.discovered or {}
-  State.cropInventory = data.cropInventory or {}
-  State.invTab = data.invTab or "seeds"
+  State.crops = data.crops or {}
   for _, k in ipairs(C.FERT_KEYS) do
     State.fertInventory[k] = State.fertInventory[k] or 0
     State.fertLevel[k] = State.fertLevel[k] or 1
-  end
-
-  State.seeds = {}
-  for _, s in ipairs(data.seeds or {}) do
-    State.seeds[#State.seeds + 1] = {
-      id = s.id,
-      genome = s.g,
-      pheno = Genetics.phenotype(s.g),
-      label = s.l,
-    }
   end
 
   for y = 1, C.GRID_H do

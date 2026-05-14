@@ -24,10 +24,10 @@ Love2D 11.5. No tests, no lint, no build — runs directly from source.
 | File | Responsibility |
 |------|----------------|
 | `constants.lua` | All tunables: grid, costs, work times, emoji palette, dominance ladder, mutation rate, water gates, robot names, fertilizers, save schema. **Edit here first** when changing gameplay numbers. |
-| `state.lua` | Mutable singleton: `tiles`, `robots`, `seeds`, `money`, popups, toggle states (`stickMode`, `digToggle`, `fertMode`, `restrictMode`, `selectedSeedId`), fertilizer inventory, modal/dropdown state. Helpers for coord conversion, seed/robot creation, fertilizer math, toggle ops. |
+| `state.lua` | Mutable singleton: `tiles`, `robots`, `crops` (stacked by `[cropIdx][tier]=count`), `money`, popups, toggle states (`stickMode`, `digToggle`, `fertMode`, `restrictMode`, `selectedCropIdx`/`selectedCropTier`), fertilizer inventory, modal/dropdown state. Helpers for coord conversion, robot creation, fertilizer math, toggle ops. |
 | `genetics.lua` | Pure Mendel: `baseGenome`, `cloneGenome`, `phenotype`, `cross` (random allele per slot + 3% mutation). |
 | `sim.lua` | Per-tick robot AI + world tickers. `findRobotJob` (claim-aware), `tickCrops`, `tickWeeds` (wild only), `tickBreeding` (stick + ≥2 ripe neighbors → hybrid). `SIM_SPEED` scales `dt` globally. |
-| `harvest.lua` | Player harvest (LMB on ripe): ripe→tilled, drops 1–2 cloned seeds + money. The robot `Replant` task in `sim.lua` is different — instant money + reset to growing, no seeds. |
+| `harvest.lua` | Player harvest (LMB on ripe): ripe→tilled, adds 1 crop to inventory at `(cropIdx, tier)`. The robot `Replant` task in `sim.lua` is different — instant money + reset to growing, no inventory item. |
 | `save.lua` | Persistent save/load with autosave. Schema-versioned via `C.SAVE_SCHEMA`; mismatch starts fresh. |
 | `modals.lua` | Immediate-mode overlays drawn with Love2D primitives (not FlexLove): bestiary, reset-confirm. Driven by `State.openModal`. |
 | `sounds.lua` | Procedurally generated tones. `Sounds.muted` toggle. |
@@ -37,7 +37,7 @@ Love2D 11.5. No tests, no lint, no build — runs directly from source.
 ```
 wild ──Till─→ tilled ──player plant──→ growing ──auto──→ ripe
                 │                          ↑               │
-                ↓                          │               ├─ player Harvest → tilled (+seeds, +money)
+                ↓                          │               ├─ player Harvest → tilled (+1 crop in inv)
               stick ──≥2 ripe neighbors────┘               └─ robot Replant   → growing (+money only)
                        cross genomes
 any → wild   (shovel/dig toggle)
@@ -50,7 +50,7 @@ any → wild   (shovel/dig toggle)
 
 ## Input model
 
-Toggle-based, not mode-based. Player clicks an action-bar button to activate a toggle (stick / fertilizer / shovel / restrict) or selects a seed, then LMB on a tile applies it. With no toggle active, LMB does the contextually-correct thing: harvest a ripe tile, plant the selected seed on a tilled tile. MMB queues the nearest robot for a tile. RMB cancels the active toggle. `State.clearModes()` resets all toggles.
+Toggle-based, not mode-based. Player clicks an action-bar button to activate a toggle (stick / fertilizer / shovel / restrict) or selects a crop from the inventory list, then LMB on a tile applies it. With no toggle active, LMB does the contextually-correct thing: harvest a ripe tile, plant the selected crop on a tilled tile. MMB queues the nearest robot for a tile. RMB cancels the active toggle/selection. `State.clearModes()` resets all toggles + crop selection.
 
 ## SE3 engine
 
