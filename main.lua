@@ -1,9 +1,8 @@
-local base = love.filesystem.getSource()
-package.path = base .. "/libs/?.lua;"
-            .. base .. "/libs/?/init.lua;"
-            .. base .. "/modules/?.lua;"
-            .. base .. "/modules/?/init.lua;"
-            .. package.path
+love.filesystem.setRequirePath(
+  "libs/?.lua;libs/?/init.lua;"
+  .. "modules/?.lua;modules/?/init.lua;"
+  .. love.filesystem.getRequirePath()
+)
 
 local isWeb = love.system.getOS() == "Web"
 local mcp = not isWeb and require("love_mcp") or nil

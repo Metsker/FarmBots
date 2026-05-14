@@ -1,6 +1,6 @@
 function love.conf(t)
   t.identity = "farmbots"
-  t.version  = "11.5"
+  t.version  = "11.4"
   t.window.title      = "FarmBots"
   if love._os == "Web" then
     t.window.width  = 1280
