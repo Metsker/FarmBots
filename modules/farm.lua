@@ -606,7 +606,8 @@ local function drawGrid()
     local cost = State.rowUnlockCost(y) or 0
     local moneyOk = State.money >= cost
     local nextRow = y == State.unlockedRows + 1
-    local costTxt = "$" .. cost
+    local showCost = cost > 0
+    local costTxt = showCost and ("$" .. cost) or ""
     if moneyOk and nextRow then
       love.graphics.setColor(1, 0.95, 0.45, 1)
     elseif moneyOk then
@@ -617,9 +618,9 @@ local function drawGrid()
     local reqs = State.rowUnlockReqs(y)
     local emojiScale = 28 / EMOJI_NATIVE
     local cellGap = 16
-    local costW = fontUIBig:getWidth(costTxt)
+    local costW = showCost and fontUIBig:getWidth(costTxt) or 0
     local cells = {}
-    local totalW = costW + cellGap
+    local totalW = costW + (showCost and cellGap or 0)
     love.graphics.setFont(fontUI)
     if reqs then
       for i, r in ipairs(reqs) do
@@ -643,9 +644,11 @@ local function drawGrid()
     end
     local cx = centerX - totalW * 0.5
     local lineY = centerY - fontUIBig:getHeight() * 0.5
-    love.graphics.setFont(fontUIBig)
-    love.graphics.print(costTxt, cx, lineY)
-    cx = cx + costW + cellGap
+    if showCost then
+      love.graphics.setFont(fontUIBig)
+      love.graphics.print(costTxt, cx, lineY)
+      cx = cx + costW + cellGap
+    end
     love.graphics.setFont(fontUI)
     local cellTextY = centerY - fontUI:getHeight() * 0.5
     for _, cell in ipairs(cells) do
