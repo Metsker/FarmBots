@@ -157,11 +157,8 @@ local function rebuildHudButtons()
   end
   for i, r in ipairs(State.robots) do
     local rowY = robotsTop + (i - 1) * robotRowH - State.robotScroll
-    if rowY < robotsTop or rowY + BTN_H > robotsTop + robotViewportH then
-      goto continue_robot
-    end
-    do
-    local cursorX = hx
+    if rowY >= robotsTop and rowY + BTN_H <= robotsTop + robotViewportH then
+      local cursorX = hx
 
     hudBtn("robot_name_" .. i, cursorX, rowY, nameMaxW, BTN_H, r.name, function() end,
       { selected = true, nameLabel = true })
@@ -231,7 +228,6 @@ local function rebuildHudButtons()
       end,
       { disabled = qCount <= 0, clearIcon = true })
     end
-    ::continue_robot::
   end
 
   local invTop = robotsTop + robotViewportH + 14
