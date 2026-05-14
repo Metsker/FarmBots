@@ -26,6 +26,13 @@ jobs:
       - name: Fetch 2dengine love.js
         run: git clone --depth 1 https://github.com/2dengine/love.js.git /tmp/lovejs
 
+      - name: Stamp version.lua
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          DATE=$(date -u +%Y-%m-%d)
+          printf 'return { sha = "%s", date = "%s" }\n' "$SHA" "$DATE" > version.lua
+          cat version.lua
+
       - name: Build .love archive
         run: |
           zip -r farmbots.love . \
