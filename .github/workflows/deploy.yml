@@ -51,10 +51,16 @@ jobs:
           cat >> web_build/theme/love.css <<'EOF'
 
           /* Scale the game canvas down to fit any viewport while preserving 16:9 aspect. */
-          body { margin: 0; background: #111; overflow: hidden; min-height: 100vh; }
-          h1, footer { display: none; }
-          center, center > div { width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; }
-          #canvas { width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); display: block; }
+          html, body { margin: 0; padding: 0; background: #111; overflow: hidden; width: 100%; height: 100%; }
+          h1, footer { display: none !important; }
+          #canvas {
+            position: fixed !important;
+            top: 0; left: 0; right: 0; bottom: 0;
+            margin: auto !important;
+            width: min(100vw, calc(100vh * 16 / 9)) !important;
+            height: min(100vh, calc(100vw * 9 / 16)) !important;
+            display: block !important;
+          }
           EOF
 
       - name: Upload Pages artifact
