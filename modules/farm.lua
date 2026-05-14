@@ -141,7 +141,7 @@ local function rebuildHudButtons()
   local robotRowH = 50
   local availableH = (buyY - 14) - robotsTop
   local robotViewportH = math.max(60, math.floor((availableH - 14) / 2))
-  robotViewport = { x = hx, y = robotsTop, w = hw - 60, h = robotViewportH }
+  robotViewport = { x = hx, y = robotsTop, w = hw, h = robotViewportH }
   local robotsContentH = #State.robots * robotRowH
   robotScrollMax = math.max(0, robotsContentH - robotViewportH)
   if State.robotScroll > robotScrollMax then State.robotScroll = robotScrollMax end
@@ -155,11 +155,11 @@ local function rebuildHudButtons()
   end
   for i, r in ipairs(State.robots) do
     local rowY = robotsTop + (i - 1) * robotRowH - State.robotScroll
-    if rowY >= robotsTop and rowY + BTN_H <= robotsTop + robotViewportH then
+    if rowY + BTN_H > robotsTop and rowY < robotsTop + robotViewportH then
       local cursorX = hx
 
     hudBtn("robot_name_" .. i, cursorX, rowY, nameMaxW, BTN_H, r.name, function() end,
-      { selected = true, nameLabel = true })
+      { selected = true, nameLabel = true, rowClip = "robots" })
     cursorX = cursorX + nameMaxW + BTN_GAP
 
     local taskLabel = r.task or "Idle"
@@ -177,7 +177,7 @@ local function rebuildHudButtons()
         if State.openDropdown == ddKey then State.openDropdown = nil
         else State.openDropdown = ddKey end
       end,
-      { active = (State.openDropdown == ddKey), dropdownTrigger = ddKey })
+      { active = (State.openDropdown == ddKey), dropdownTrigger = ddKey, rowClip = "robots" })
     if State.openDropdown == ddKey then
       pendingPopups[#pendingPopups + 1] = {
         robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tkW,
@@ -194,7 +194,7 @@ local function rebuildHudButtons()
         if State.openDropdown == ddKey2 then State.openDropdown = nil
         else State.openDropdown = ddKey2 end
       end,
-      { active = (State.openDropdown == ddKey2), dropdownTrigger = ddKey2, dim = r.task2 == nil })
+      { active = (State.openDropdown == ddKey2), dropdownTrigger = ddKey2, dim = r.task2 == nil, rowClip = "robots" })
     if State.openDropdown == ddKey2 then
       pendingPopups[#pendingPopups + 1] = {
         robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tk2W,
@@ -209,7 +209,7 @@ local function rebuildHudButtons()
     local spW = btnW(speedLabel)
     hudBtn("robot_speed_" .. i, cursorX, rowY, spW, BTN_H, speedLabel,
       function() State.upgradeRobot(r) end,
-      { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "robotUp", robot = r } })
+      { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "robotUp", robot = r }, rowClip = "robots" })
     cursorX = cursorX + spW + BTN_GAP
 
     local qCount = r.queue and #r.queue or 0
@@ -224,15 +224,15 @@ local function rebuildHudButtons()
           r.idleTimer = 0
         end
       end,
-      { disabled = qCount <= 0, clearIcon = true })
+      { disabled = qCount <= 0, clearIcon = true, rowClip = "robots" })
     end
   end
 
   local invTop = robotsTop + robotViewportH + 14
   local invBottomLimit = buyY - 14
   local viewportH = math.max(60, invBottomLimit - invTop)
-  cropViewport = { x = hx, y = invTop, w = hw - 60, h = viewportH }
-  local rowH = 36
+  cropViewport = { x = hx, y = invTop, w = hw, h = viewportH }
+  local rowH = 42
   local rows = {}
   for cropIdx = 1, #C.CROPS do
     local byTier = State.crops[cropIdx]
@@ -251,10 +251,10 @@ local function rebuildHudButtons()
   if State.cropScroll < 0 then State.cropScroll = 0 end
   cropScrollMax = scrollMax
   local sellBtnW = 90
-  local infoBtnW = (hw - 60) - sellBtnW - 4
+  local infoBtnW = hw - sellBtnW - 4
   for i, row in ipairs(rows) do
     local rowY = invTop + (i - 1) * rowH - State.cropScroll
-    if rowY >= invTop and rowY + 32 <= invTop + viewportH then
+    if rowY + 32 > invTop and rowY < invTop + viewportH then
       local cropInfo = C.CROPS[row.crop]
       local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
       local idCrop = row.crop .. "_" .. row.tier
@@ -262,11 +262,11 @@ local function rebuildHudButtons()
       hudBtn("invc_" .. idCrop, hx, rowY, infoBtnW, 32,
         "",
         function() State.toggleCrop(row.crop, row.tier) end,
-        { cropRow = row, selected = selected })
+        { cropRow = row, selected = selected, rowClip = "crops" })
       hudBtn("invc_sell_" .. idCrop, hx + infoBtnW + 4, rowY, sellBtnW, 32,
         "Sell $" .. price,
         function() State.sellOne(row.crop, row.tier) end,
-        { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true })
+        { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true, rowClip = "crops" })
     end
   end
 
@@ -742,7 +742,7 @@ local function drawCropTooltip()
   local t = State.hoverTile
   local ph = t.crop.pheno
   local sx, sy = State.tileToScreen(t.x, t.y)
-  local panelW, panelH = 180, 86
+  local panelW, panelH = 180, 106
   local px = sx + C.TILE * 0.5 - panelW * 0.5
   local py = sy - panelH - 8
   if py < 4 then py = sy + C.TILE + 8 end
@@ -768,7 +768,9 @@ local function drawCropTooltip()
 
   lineY = lineY + 20
   love.graphics.setColor(0.85, 0.85, 0.9, 1)
-  love.graphics.print(string.format("%d$  %ds", ph.yield, ph.growTime), px + 10, lineY)
+  love.graphics.print(string.format("Price: %d$", ph.yield), px + 10, lineY)
+  lineY = lineY + 20
+  love.graphics.print(string.format("Grow: %dsec", ph.growTime), px + 10, lineY)
 
   if t.crop.hybrid then
     love.graphics.setColor(1, 0.4, 0.95, 1)
@@ -846,9 +848,16 @@ local function drawHud()
 
   local mxh, myh = love.mouse.getPosition()
   for _, b in ipairs(hudButtons) do
+    local clipVp
+    if b.opts.rowClip == "robots" then clipVp = robotViewport
+    elseif b.opts.rowClip == "crops" then clipVp = cropViewport end
+    if clipVp then
+      love.graphics.setScissor(clipVp.x, clipVp.y, clipVp.w, clipVp.h)
+    end
     local hover = (not b.opts.disabled) and (not b.opts.nameLabel)
       and mxh >= b.x and mxh <= b.x + b.w
       and myh >= b.y and myh <= b.y + b.h
+      and (not clipVp or (myh >= clipVp.y and myh <= clipVp.y + clipVp.h))
     local br, bg, bb
     if b.opts.selected then
       br, bg, bb = 0.35, 0.55, 0.35
@@ -977,21 +986,23 @@ local function drawHud()
     else
       love.graphics.print(b.label, b.x + 10, b.y + 10)
     end
+    if clipVp then love.graphics.setScissor() end
   end
 
-  do
-    love.graphics.setColor(0.7, 0.7, 0.8, 1)
-    for _, b in ipairs(hudButtons) do
-      if b.opts.cropRow then
-        love.graphics.rectangle("fill", cropViewport.x, b.y + b.h + 1, cropViewport.w, 2)
-      end
-    end
-  end
+  local lineX = C.HUD_X - 8
+  local lineW = C.HUD_W + 16
+  local topY = robotViewport.y - 7
+  local midY = math.floor((robotViewport.y + robotViewport.h + cropViewport.y) * 0.5)
+  local botY = cropViewport.y + cropViewport.h + 7
+  love.graphics.setColor(0.7, 0.7, 0.8, 1)
+  love.graphics.rectangle("fill", lineX, topY - 1, lineW, 2)
+  love.graphics.rectangle("fill", lineX, midY - 1, lineW, 2)
+  love.graphics.rectangle("fill", lineX, botY - 1, lineW, 2)
 
+  local barX = C.HUD_X + C.HUD_W + 2
   if cropScrollMax > 0 then
-    local barX = cropViewport.x + cropViewport.w + 8
-    local barY = cropViewport.y
-    local barH = cropViewport.h
+    local barY = cropViewport.y + 2
+    local barH = cropViewport.h - 4
     love.graphics.setColor(0.15, 0.15, 0.18, 1)
     love.graphics.rectangle("fill", barX, barY, 5, barH, 2, 2)
     local thumbH = math.max(20, barH * (barH / (barH + cropScrollMax)))
@@ -1001,9 +1012,8 @@ local function drawHud()
   end
 
   if robotScrollMax > 0 then
-    local barX = robotViewport.x + robotViewport.w + 8
-    local barY = robotViewport.y
-    local barH = robotViewport.h
+    local barY = robotViewport.y + 2
+    local barH = robotViewport.h - 4
     love.graphics.setColor(0.15, 0.15, 0.18, 1)
     love.graphics.rectangle("fill", barX, barY, 5, barH, 2, 2)
     local thumbH = math.max(20, barH * (barH / (barH + robotScrollMax)))
@@ -1016,7 +1026,7 @@ local function drawHud()
   love.graphics.setFont(fontUISmall)
   love.graphics.setColor(0.55, 0.55, 0.65, 1)
   love.graphics.print("LMB: harvest, plant selected crop, or use active action.", C.HUD_X, helpY)
-  love.graphics.print("RMB: cancel mode.   MMB: queue nearest robot for tile.", C.HUD_X, helpY + 16)
+  love.graphics.print("RMB/MMB: cancel mode, else queue nearest robot for tile.", C.HUD_X, helpY + 16)
   love.graphics.print("Action bar: stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
 
 end
@@ -1199,14 +1209,6 @@ local function handleLMB(tile)
   flashTile(tile)
 end
 
-local function handleRMB(tile)
-  if State.stickMode or State.fertMode or State.digToggle or State.restrictMode or State.selectedCropIdx then
-    State.clearModes()
-    return
-  end
-  flashTile(tile)
-end
-
 local function handleMMB(tile)
   local needed
   if tile.weed then
@@ -1248,6 +1250,14 @@ local function handleMMB(tile)
   end
 end
 
+local function handleRMB(tile)
+  if State.stickMode or State.fertMode or State.digToggle or State.restrictMode or State.selectedCropIdx then
+    State.clearModes()
+    return
+  end
+  handleMMB(tile)
+end
+
 function Farm.mousepressed(x, y, btn)
   if State.openModal then
     Modals.mousepressed(x, y, btn)
@@ -1257,7 +1267,11 @@ function Farm.mousepressed(x, y, btn)
   if btn == 1 then
     for i = #hudButtons, 1, -1 do
       local b = hudButtons[i]
-      if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+      local clipVp
+      if b.opts.rowClip == "robots" then clipVp = robotViewport
+      elseif b.opts.rowClip == "crops" then clipVp = cropViewport end
+      if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h
+         and (not clipVp or (y >= clipVp.y and y <= clipVp.y + clipVp.h)) then
         if not b.opts.disabled then
           Sounds.play(b.opts.sound or "click")
           b.onClick()
@@ -1311,12 +1325,13 @@ function Farm.wheelmoved(dx, dy)
     return
   end
   local mx, my = love.mouse.getPosition()
-  if mx >= robotViewport.x and mx <= robotViewport.x + robotViewport.w + 16
+  local hudRight = C.HUD_X + C.HUD_W + 16
+  if mx >= robotViewport.x and mx <= hudRight
      and my >= robotViewport.y and my <= robotViewport.y + robotViewport.h then
     State.robotScroll = math.max(0, math.min(robotScrollMax, State.robotScroll - dy * 50))
-  elseif mx >= cropViewport.x and mx <= cropViewport.x + cropViewport.w + 16
+  elseif mx >= cropViewport.x and mx <= hudRight
      and my >= cropViewport.y and my <= cropViewport.y + cropViewport.h then
-    State.cropScroll = math.max(0, math.min(cropScrollMax, State.cropScroll - dy * 36))
+    State.cropScroll = math.max(0, math.min(cropScrollMax, State.cropScroll - dy * 42))
   end
 end
 

@@ -50,7 +50,7 @@ any → wild   (shovel/dig toggle)
 
 ## Input model
 
-Toggle-based, not mode-based. Player clicks an action-bar button to activate a toggle (stick / fertilizer / shovel / restrict) or selects a crop from the inventory list, then LMB on a tile applies it. With no toggle active, LMB does the contextually-correct thing: harvest a ripe tile, plant the selected crop on a tilled tile. MMB queues the nearest robot for a tile. RMB cancels the active toggle/selection. `State.clearModes()` resets all toggles + crop selection.
+Toggle-based, not mode-based. Player clicks an action-bar button to activate a toggle (stick / fertilizer / shovel / restrict) or selects a crop from the inventory list, then LMB on a tile applies it. With no toggle active, LMB does the contextually-correct thing: harvest a ripe tile, plant the selected crop on a tilled tile. MMB always queues the nearest robot for a tile. RMB cancels the active toggle/selection if one is active, otherwise queues the nearest robot (so web users without a middle mouse button can still queue). `State.clearModes()` resets all toggles + crop selection.
 
 ## Emoji font
 
