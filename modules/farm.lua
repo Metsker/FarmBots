@@ -791,12 +791,6 @@ local function drawRobots()
       love.graphics.circle("line", cx, cy, radius)
       love.graphics.setLineWidth(1)
     end
-    local tUnder = State.tileAt(math.floor(r.px + 0.5), math.floor(r.py + 0.5))
-    if tUnder then
-      local br, bgc, bb = tileFill(tUnder)
-      love.graphics.setColor(br, bgc, bb, 1)
-      love.graphics.circle("fill", cx, cy, C.TILE * 0.30)
-    end
     love.graphics.setFont(fontEmojiBig)
     love.graphics.setColor(rc[1], rc[2], rc[3], 1)
     local rw = fontEmojiBig:getWidth(C.ROBOT_EMOJI) * scale
