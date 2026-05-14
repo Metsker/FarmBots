@@ -31,6 +31,7 @@ local cropViewport = { x = 0, y = 0, w = 0, h = 0 }
 local cropScrollMax = 0
 local robotViewport = { x = 0, y = 0, w = 0, h = 0 }
 local robotScrollMax = 0
+local gameCanvas
 
 local held = nil  -- { onClick, x, y, w, h, nextFire, delay }
 local HOLD_INITIAL_DELAY = 0.30
@@ -390,6 +391,12 @@ function Farm.start()
     emoji = fontEmoji, emojiBig = fontEmojiBig,
     emojiNative = EMOJI_NATIVE,
   })
+  gameCanvas = love.graphics.newCanvas(1920, 1080)
+  State.recomputeViewport()
+end
+
+function Farm.resize()
+  State.recomputeViewport()
 end
 
 function Farm.shutdown()
@@ -401,7 +408,7 @@ function Farm.update(dt)
   State.tickPopups()
   rebuildHudButtons()
   if held then
-    local mx, my = love.mouse.getPosition()
+    local mx, my = State.getMousePosition()
     if not love.mouse.isDown(1)
       or mx < held.x or mx > held.x + held.w
       or my < held.y or my > held.y + held.h then
@@ -846,7 +853,7 @@ local function drawHud()
     State.time, cropTotal, #State.robots, C.ROBOT_CAP, State.weedTimer),
     C.HUD_X, C.HUD_OY + 44)
 
-  local mxh, myh = love.mouse.getPosition()
+  local mxh, myh = State.getMousePosition()
   for _, b in ipairs(hudButtons) do
     local clipVp
     if b.opts.rowClip == "robots" then clipVp = robotViewport
@@ -1032,7 +1039,7 @@ local function drawHud()
 end
 
 local function drawHudTooltip()
-  local mx, my = love.mouse.getPosition()
+  local mx, my = State.getMousePosition()
   local hovered
   for i = #hudButtons, 1, -1 do
     local b = hudButtons[i]
@@ -1101,6 +1108,7 @@ local function drawHudTooltip()
 end
 
 function Farm.draw()
+  love.graphics.setCanvas(gameCanvas)
   love.graphics.clear(0.08, 0.10, 0.08, 1)
   drawGrid()
   drawRobots()
@@ -1109,6 +1117,11 @@ function Farm.draw()
   drawCropTooltip()
   drawHudTooltip()
   Modals.draw()
+  love.graphics.setCanvas()
+
+  love.graphics.clear(0, 0, 0, 1)
+  love.graphics.setColor(1, 1, 1, 1)
+  love.graphics.draw(gameCanvas, State.gameOffsetX, State.gameOffsetY, 0, State.gameScale, State.gameScale)
 end
 
 local function pickHover(sx, sy)
@@ -1122,7 +1135,10 @@ local function pickHover(sx, sy)
   State.hoverTile = State.tileAt(tx, ty)
 end
 
-function Farm.mousemoved(x, y) pickHover(x, y) end
+function Farm.mousemoved(x, y)
+  local gx, gy = State.windowToGame(x, y)
+  pickHover(gx, gy)
+end
 
 local function flashTile(tile, color)
   if tile then
@@ -1259,6 +1275,7 @@ local function handleRMB(tile)
 end
 
 function Farm.mousepressed(x, y, btn)
+  x, y = State.windowToGame(x, y)
   if State.openModal then
     Modals.mousepressed(x, y, btn)
     return
@@ -1324,7 +1341,7 @@ function Farm.wheelmoved(dx, dy)
     Modals.wheelmoved(dx, dy)
     return
   end
-  local mx, my = love.mouse.getPosition()
+  local mx, my = State.getMousePosition()
   local hudRight = C.HUD_X + C.HUD_W + 16
   if mx >= robotViewport.x and mx <= hudRight
      and my >= robotViewport.y and my <= robotViewport.y + robotViewport.h then

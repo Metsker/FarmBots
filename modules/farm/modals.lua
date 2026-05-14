@@ -18,7 +18,7 @@ local function hitBtn(x, y, w, h, onClick)
 end
 
 local function isHover(x, y, w, h)
-  local mx, my = love.mouse.getPosition()
+  local mx, my = State.getMousePosition()
   return mx >= x and mx <= x + w and my >= y and my <= y + h
 end
 

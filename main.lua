@@ -26,6 +26,7 @@ end
 
 function love.update(dt)              Farm.update(dt) end
 function love.draw()                  Farm.draw() end
+function love.resize()                Farm.resize() end
 function love.mousemoved(x,y,dx,dy,t) Farm.mousemoved(x,y,dx,dy,t) end
 function love.mousepressed(x,y,b,t)   Farm.mousepressed(x,y,b,t) end
 function love.mousereleased(x,y,b,t)  Farm.mousereleased(x,y,b,t) end

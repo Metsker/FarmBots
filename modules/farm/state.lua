@@ -178,6 +178,24 @@ function State.screenToTile(sx, sy)
   return tx, ty
 end
 
+State.gameScale, State.gameOffsetX, State.gameOffsetY = 1, 0, 0
+
+function State.recomputeViewport()
+  local sw, sh = love.graphics.getDimensions()
+  State.gameScale = math.min(sw / 1920, sh / 1080)
+  State.gameOffsetX = math.floor((sw - 1920 * State.gameScale) * 0.5)
+  State.gameOffsetY = math.floor((sh - 1080 * State.gameScale) * 0.5)
+end
+
+function State.windowToGame(x, y)
+  return (x - State.gameOffsetX) / State.gameScale,
+         (y - State.gameOffsetY) / State.gameScale
+end
+
+function State.getMousePosition()
+  return State.windowToGame(love.mouse.getPosition())
+end
+
 function State.nextRobotCost()
   local n = #State.robots
   return math.floor(C.ROBOT_BASE_COST * (C.ROBOT_COST_EXP ^ (n - 1)))
