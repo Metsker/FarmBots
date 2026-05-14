@@ -1112,10 +1112,11 @@ end
 
 local function drawVersion()
   love.graphics.setFont(fontUISmall)
-  love.graphics.setColor(0.65, 0.65, 0.65, 0.7)
   local w = fontUISmall:getWidth(versionLabel)
-  local h = fontUISmall:getHeight()
-  love.graphics.print(versionLabel, 1920 - w - 6, 1080 - h - 4)
+  love.graphics.setColor(0, 0, 0, 0.45)
+  love.graphics.rectangle("fill", 1920 - w - 10, 0, w + 10, 18)
+  love.graphics.setColor(1, 1, 1, 0.85)
+  love.graphics.print(versionLabel, 1920 - w - 6, 3)
 end
 
 function Farm.draw()
@@ -1249,6 +1250,18 @@ local function handleMMB(tile)
   if not needed then
     flashTile(tile); return
   end
+  for _, r in ipairs(State.robots) do
+    if r.workTile == tile then
+      flashTile(tile, { 0.3, 0.8, 1 })
+      return
+    end
+    for _, q in ipairs(r.queue) do
+      if q == tile then
+        flashTile(tile, { 0.3, 0.8, 1 })
+        return
+      end
+    end
+  end
   local best, bestDist
   for _, r in ipairs(State.robots) do
     local dx, dy = tile.x - r.px, tile.y - r.py
@@ -1259,12 +1272,6 @@ local function handleMMB(tile)
   end
   if not best then
     flashTile(tile); return
-  end
-  for _, q in ipairs(best.queue) do
-    if q == tile then
-      flashTile(tile, { 0.3, 0.8, 1 })
-      return
-    end
   end
   best.queue[#best.queue + 1] = tile
   best.pingUntil = State.time + 0.5
