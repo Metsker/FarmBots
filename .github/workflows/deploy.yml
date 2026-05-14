@@ -44,7 +44,7 @@ jobs:
             -x "dist/*"
 
       - name: Generate web build
-        run: npx love.js -c -t "FarmBots" farmbots.love web_build
+        run: npx love.js -c -m 134217728 -t "FarmBots" farmbots.love web_build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
