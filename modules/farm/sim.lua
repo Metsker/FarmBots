@@ -6,7 +6,7 @@ local Sounds = require("farm.sounds")
 local Sim = {}
 
 local function tileMatchesTask(t, task)
-  if task == "Till" then return t.state == "wild"
+  if task == "Till" then return t.state == "wild" and not t.weed
   elseif task == "Water" then return t.state == "growing" and t.crop and t.crop.water <= C.WATER_REFILL_GATE
   elseif task == "Weed" then return t.weed and true or false
   elseif task == "Replant" then return t.state == "ripe" and not t.restrict
@@ -79,9 +79,8 @@ end
 local function performWork(robot, tile)
   local task = robot.activeTask or robot.task
   if task == "Till" then
-    if tile.state == "wild" then
+    if tile.state == "wild" and not tile.weed then
       tile.state = "tilled"
-      tile.weed = false
     end
   elseif task == "Water" then
     if tile.state == "growing" and tile.crop then
