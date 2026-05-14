@@ -7,20 +7,23 @@ package.path = base .. "/libs/?.lua;"
 
 require("se3")
 
-local mcp = require("love_mcp")
+local isWeb = love.system.getOS() == "Web"
+local mcp = not isWeb and require("love_mcp") or nil
 local Farm = require("farm")
 
 function love.load()
-  local socket = require("socket")
-  _G._appLock = socket.bind("127.0.0.1", 21199)
-  if not _G._appLock then
-    print("[main] Another instance already running. Exiting.")
-    love.event.quit()
-    return
+  if not isWeb then
+    local socket = require("socket")
+    _G._appLock = socket.bind("127.0.0.1", 21199)
+    if not _G._appLock then
+      print("[main] Another instance already running. Exiting.")
+      love.event.quit()
+      return
+    end
+    mcp.init({ port = 21110 })
   end
 
   love.math.setRandomSeed(os.time())
-  mcp.init({ port = 21110 })
   Farm.start()
 end
 

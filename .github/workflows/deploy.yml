@@ -1,0 +1,56 @@
+name: Deploy web build to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install love.js
+        run: npm install -g love.js
+
+      - name: Build .love archive
+        run: |
+          zip -r farmbots.love . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x ".claude/*" \
+            -x "libs/love_mcp.lua" \
+            -x "libs/love_mcp/*" \
+            -x "*.md" \
+            -x ".gitignore" \
+            -x "web_build/*" \
+            -x "dist/*"
+
+      - name: Generate web build
+        run: npx love.js -c -t "FarmBots" farmbots.love web_build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./web_build
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
