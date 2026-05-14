@@ -783,7 +783,7 @@ local function drawCropTooltip()
   love.graphics.setColor(0.85, 0.85, 0.9, 1)
   love.graphics.print(string.format("Price: %d$", ph.yield), px + 10, lineY)
   lineY = lineY + 20
-  love.graphics.print(string.format("Grow: %dsec", ph.growTime), px + 10, lineY)
+  love.graphics.print(string.format("Grow: %ds", ph.growTime), px + 10, lineY)
 
   if t.crop.hybrid then
     love.graphics.setColor(1, 0.4, 0.95, 1)
