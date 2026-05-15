@@ -16,13 +16,12 @@ local C = {
     [1] = { robot = true },
     [2] = { breeder = true },
     [3] = { money = 50 },
-    [4] = { money = 100 },
-    [5] = { money = 200 },
-    [6] = { money = 400 },
-    [7] = { money = 800 },
-    [8] = { money = 1500 },
-    [9] = { money = 3000 },
-    [10] = { money = 6000 },
+    [4] = { money = 200 },
+    [5] = { money = 400 },
+    [6] = { money = 800 },
+    [7] = { money = 1500 },
+    [8] = { money = 3000 },
+    [9] = { money = 6000 },
   },
 
   WEED_DROP_TOMATO_CHANCE = 0.05,
@@ -287,31 +286,29 @@ local UNLOCK_RAW = {
   -- Row 4
   { { crop="Carrot",     tier="C", count=2 } },
   -- Row 5
-  { { crop="Carrot",     tier="D", count=5 } },
-  -- Row 6
   { { crop="Cucumber",   tier="D", count=3 },
     { crop="Chili",      tier="D", count=3 },
     { crop="Onion",      tier="D", count=2 } },
-  -- Row 7
+  -- Row 6
   { { crop="Corn",       tier="D", count=2 },
     { crop="Strawberry", tier="D", count=2 },
     { crop="Pepper",     tier="D", count=2 },
     { crop="Garlic",     tier="D", count=2 } },
-  -- Row 8
+  -- Row 7
   { { crop="Broccoli",   tier="C", count=2 },
     { crop="Pineapple",  tier="C", count=2 },
     { crop="Eggplant",   tier="C", count=2 },
     { crop="Cherry",     tier="C", count=2 },
     { crop="Grapes",     tier="C", count=2 } },
-  -- Row 9
+  -- Row 8
   { { crop="Watermelon", tier="B", count=2 },
     { crop="Mushroom",   tier="B", count=2 },
     { crop="Pumpkin",    tier="B", count=2 },
     { crop="Lemon",      tier="B", count=2 } },
-  -- Row 10
+  -- Row 9
   { { crop="Avocado",    tier="B", count=2 },
     { crop="Banana",     tier="A", count=2 } },
-  -- Row 11
+  -- Row 10
   { { crop="Coconut",    tier="A", count=2 },
     { crop="Mango",      tier="A", count=2 },
     { crop="Banana",     tier="A", count=2 },

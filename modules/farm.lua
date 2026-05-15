@@ -685,14 +685,28 @@ local function drawGrid()
       love.graphics.setColor(0.95, 0.45, 0.45, 1)
     end
     local reqs = State.rowUnlockReqs(y)
+    local robotReq = State.rowUnlockRobotReq(y)
     local emojiScale = 28 / EMOJI_NATIVE
     local cellGap = 16
     local costW = showCost and fontUIBig:getWidth(costTxt) or 0
     local cells = {}
     local totalW = costW + (showCost and cellGap or 0)
     love.graphics.setFont(fontUI)
+    if robotReq then
+      local have = #State.robots
+      local countTxt = string.format(" %d/%d", have, robotReq)
+      local emojiW = fontEmoji:getWidth(C.ROBOT_EMOJI) * emojiScale
+      local countW = fontUI:getWidth(countTxt)
+      local cw = emojiW + countW
+      cells[#cells + 1] = {
+        kind = "robot",
+        w = cw, emojiW = emojiW, countW = countW, countTxt = countTxt,
+        have = have, need = robotReq,
+      }
+      totalW = totalW + cw
+    end
     if reqs then
-      for i, r in ipairs(reqs) do
+      for _, r in ipairs(reqs) do
         local have = State.cropCountAtTier(r.crop, r.tier)
         local crop = C.CROPS[r.crop]
         local tierName = C.TIER_NAMES[r.tier]
@@ -702,15 +716,16 @@ local function drawGrid()
         local countW = fontUI:getWidth(countTxt)
         local tierW = fontUI:getWidth(tierTxt)
         local cw = emojiW + countW + tierW
-        cells[i] = {
+        cells[#cells + 1] = {
+          kind = "crop",
           w = cw, emojiW = emojiW, countW = countW, countTxt = countTxt,
           tierW = tierW, tierTxt = tierTxt, tier = r.tier,
           have = have, need = r.count, crop = crop,
         }
         totalW = totalW + cw
-        if i < #reqs then totalW = totalW + cellGap end
       end
     end
+    if #cells > 1 then totalW = totalW + cellGap * (#cells - 1) end
     local cx = centerX - totalW * 0.5
     local lineY = centerY - fontUIBig:getHeight() * 0.5
     if showCost then
@@ -721,7 +736,11 @@ local function drawGrid()
     love.graphics.setFont(fontUI)
     local cellTextY = centerY - fontUI:getHeight() * 0.5
     for _, cell in ipairs(cells) do
-      drawCenteredEmojiTinted(fontEmoji, cell.crop.emoji, cx + cell.emojiW * 0.5, centerY, emojiScale, cell.crop.color)
+      if cell.kind == "robot" then
+        drawCenteredEmojiTinted(fontEmoji, C.ROBOT_EMOJI, cx + cell.emojiW * 0.5, centerY, emojiScale, { 0.85, 0.85, 0.95 })
+      else
+        drawCenteredEmojiTinted(fontEmoji, cell.crop.emoji, cx + cell.emojiW * 0.5, centerY, emojiScale, cell.crop.color)
+      end
       local satisfied = cell.have >= cell.need
       if satisfied then
         love.graphics.setColor(0.55, 0.95, 0.55, 1)
@@ -730,9 +749,11 @@ local function drawGrid()
       end
       love.graphics.setFont(fontUI)
       love.graphics.print(cell.countTxt, cx + cell.emojiW, cellTextY)
-      local tc = C.TIER_COLORS[cell.tier] or { 1, 1, 1 }
-      love.graphics.setColor(tc[1], tc[2], tc[3], 1)
-      love.graphics.print(cell.tierTxt, cx + cell.emojiW + cell.countW, cellTextY)
+      if cell.kind == "crop" then
+        local tc = C.TIER_COLORS[cell.tier] or { 1, 1, 1 }
+        love.graphics.setColor(tc[1], tc[2], tc[3], 1)
+        love.graphics.print(cell.tierTxt, cx + cell.emojiW + cell.countW, cellTextY)
+      end
       cx = cx + cell.w + cellGap
     end
   end
