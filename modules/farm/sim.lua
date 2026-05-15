@@ -40,15 +40,18 @@ end
 local function findJobForTask(robot, task, claimed)
   if not task or task == "Idle" or task == "None" then return nil end
   local best
-  local bestDist
+  local bestRank
   for y = 1, State.unlockedRows do
     for x = 1, C.GRID_W do
       local t = State.tiles[y][x]
       if tileMatchesAutonomousTask(robot, t, task) and not claimed[t] then
         local dx, dy = x - robot.px, y - robot.py
-        local d = dx*dx + dy*dy
-        if not bestDist or d < bestDist then
-          bestDist = d
+        local rank = dx*dx + dy*dy
+        if task == "Plant" and t.parentSlot then
+          rank = rank - 1e6
+        end
+        if not bestRank or rank < bestRank then
+          bestRank = rank
           best = t
         end
       end
