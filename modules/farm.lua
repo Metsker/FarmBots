@@ -17,6 +17,7 @@ local fontEmojiHuge
 local fontUI
 local fontUIBig
 local fontUISmall
+local fontUIVersion
 
 local EMOJI_NATIVE = 109
 local function loadFonts()
@@ -24,9 +25,10 @@ local function loadFonts()
   fontEmoji     = rawFont
   fontEmojiBig  = rawFont
   fontEmojiHuge = rawFont
-  fontUI      = love.graphics.newFont(18)
-  fontUIBig   = love.graphics.newFont(28)
-  fontUISmall = love.graphics.newFont(12)
+  fontUI        = love.graphics.newFont(18)
+  fontUIBig     = love.graphics.newFont(28)
+  fontUISmall   = love.graphics.newFont(12)
+  fontUIVersion = love.graphics.newFont(16)
 end
 
 local hudButtons = {}
@@ -1221,12 +1223,10 @@ end
 
 local function drawVersion()
   local label = VERSION_LABEL
-  love.graphics.setFont(fontUISmall)
-  local w = fontUISmall:getWidth(label)
-  love.graphics.setColor(0, 0, 0, 0.45)
-  love.graphics.rectangle("fill", 1920 - w - 10, 0, w + 10, 18)
+  love.graphics.setFont(fontUIVersion)
+  local w = fontUIVersion:getWidth(label)
   love.graphics.setColor(1, 1, 1, 0.85)
-  love.graphics.print(label, 1920 - w - 6, 3)
+  love.graphics.print(label, 1920 - w - 6, 2)
 end
 
 function Farm.draw()
