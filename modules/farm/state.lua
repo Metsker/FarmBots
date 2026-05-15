@@ -51,6 +51,7 @@ function State.init()
   end
 
   State.crops = {}
+  State.boughtCrops = {}
 
   State._usedNames = {}
   State.robots = {
@@ -361,6 +362,33 @@ function State.addCrop(cropIdx, tier)
   byCrop[tier] = (byCrop[tier] or 0) + 1
 end
 
+function State.addBoughtCrop(cropIdx, tier)
+  State.addCrop(cropIdx, tier)
+  local bought = State.boughtCrops[cropIdx]
+  if not bought then
+    bought = {}
+    State.boughtCrops[cropIdx] = bought
+  end
+  bought[tier] = (bought[tier] or 0) + 1
+end
+
+function State.boughtCount(cropIdx, tier)
+  local byCrop = State.boughtCrops[cropIdx]
+  if not byCrop then return 0 end
+  return byCrop[tier] or 0
+end
+
+function State.sellableCount(cropIdx, tier)
+  return State.cropCount(cropIdx, tier) - State.boughtCount(cropIdx, tier)
+end
+
+local function decBought(cropIdx, tier)
+  local bought = State.boughtCrops[cropIdx]
+  if not bought or (bought[tier] or 0) <= 0 then return end
+  bought[tier] = bought[tier] - 1
+  if bought[tier] <= 0 then bought[tier] = nil end
+end
+
 function State.cropCount(cropIdx, tier)
   local byCrop = State.crops[cropIdx]
   if not byCrop then return 0 end
@@ -389,6 +417,7 @@ local function takeOneFrom(cropIdx, minTier)
   if not bestT then return false end
   byCrop[bestT] = byCrop[bestT] - 1
   if byCrop[bestT] <= 0 then byCrop[bestT] = nil end
+  decBought(cropIdx, bestT)
   return true
 end
 
@@ -397,12 +426,13 @@ function State.takeCrop(cropIdx, tier)
   if not byCrop or (byCrop[tier] or 0) <= 0 then return false end
   byCrop[tier] = byCrop[tier] - 1
   if byCrop[tier] <= 0 then byCrop[tier] = nil end
+  decBought(cropIdx, tier)
   return true
 end
 
 function State.sellOne(cropIdx, tier)
+  if State.sellableCount(cropIdx, tier) <= 0 then return 0 end
   local byCrop = State.crops[cropIdx]
-  if not byCrop or (byCrop[tier] or 0) <= 0 then return 0 end
   local cropInfo = C.CROPS[cropIdx]
   local mult = cropInfo.yieldMult or 1
   local price = math.floor(C.YIELD_TIER_VALUES[tier] * mult)

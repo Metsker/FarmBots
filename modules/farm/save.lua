@@ -109,6 +109,7 @@ function Save.save()
     fertLevel = State.fertLevel,
     discovered = State.discovered,
     crops = State.crops,
+    boughtCrops = State.boughtCrops,
     robots = snapshotRobots(),
     tiles = snapshotTiles(),
   }
@@ -140,6 +141,7 @@ function Save.load()
   State.fertLevel = data.fertLevel or {}
   State.discovered = data.discovered or {}
   State.crops = data.crops or {}
+  State.boughtCrops = data.boughtCrops or {}
   for _, k in ipairs(C.FERT_KEYS) do
     State.fertInventory[k] = State.fertInventory[k] or 0
     State.fertLevel[k] = State.fertLevel[k] or 1

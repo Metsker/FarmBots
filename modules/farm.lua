@@ -283,7 +283,7 @@ local function rebuildHudButtons()
     if rowY + 32 > invTop and rowY < invTop + viewportH then
       local cropInfo = C.CROPS[row.crop]
       local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
-      local sellable = cropInfo.buyCost == nil
+      local sellable = State.sellableCount(row.crop, row.tier) > 0
       local idCrop = row.crop .. "_" .. row.tier
       local selected = (State.selectedCropIdx == row.crop and State.selectedCropTier == row.tier)
       local infoW = sellable and infoBtnW or hw
@@ -338,7 +338,7 @@ local function rebuildHudButtons()
       function()
         if canBuyTomato then
           State.money = State.money - tCost
-          State.addCrop(1, 1)
+          State.addBoughtCrop(1, 1)
         end
       end,
       { disabled = not canBuyTomato, cropBuy = 1, sound = "buy" })
@@ -352,7 +352,7 @@ local function rebuildHudButtons()
       function()
         if canBuyCarrot then
           State.money = State.money - cCost
-          State.addCrop(2, 1)
+          State.addBoughtCrop(2, 1)
         end
       end,
       { disabled = not canBuyCarrot, cropBuy = 2, sound = "buy" })

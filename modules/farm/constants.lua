@@ -207,7 +207,7 @@ local C = {
 
   SAVE_FILE = "save.lua",
   SAVE_INTERVAL = 60,
-  SAVE_SCHEMA = 4,
+  SAVE_SCHEMA = 5,
 }
 
 -- Derived lookups: name → index, and recipe lookup by sorted-index key.
