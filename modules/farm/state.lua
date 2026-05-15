@@ -14,7 +14,7 @@ local function newTile(x, y)
 end
 
 function State.init()
-  State.money = 100
+  State.money = C.STARTER_MONEY or 0
   State.digToggle = false
   State.time  = 0
   State.weedTimer = C.WEED_SPAWN_MAX_INTERVAL
@@ -58,6 +58,12 @@ function State.init()
   State.robots = {
     State.newRobot(C.GRID_W * 0.5, 1, "Till"),
   }
+
+  for _, item in ipairs(C.STARTER_INVENTORY or {}) do
+    for _ = 1, item.count do
+      State.addBoughtCrop(item.crop, item.tier)
+    end
+  end
 end
 
 local function pickName()
@@ -528,6 +534,10 @@ function State.rowUnlockReqs(y)
   return C.ROW_UNLOCK_REQS and C.ROW_UNLOCK_REQS[y - C.STARTING_ROWS]
 end
 
+function State.rowUnlockRobotReq(y)
+  return C.ROW_UNLOCK_ROBOT_REQS and C.ROW_UNLOCK_ROBOT_REQS[y - C.STARTING_ROWS]
+end
+
 function State.canUnlockRow(y)
   if y <= State.unlockedRows then return false end
   if y ~= State.unlockedRows + 1 then return false end
@@ -539,6 +549,8 @@ function State.canUnlockRow(y)
       if State.cropCountAtTier(r.crop, r.tier) < r.count then return false end
     end
   end
+  local robotReq = State.rowUnlockRobotReq(y)
+  if robotReq and #State.robots < robotReq then return false end
   return true
 end
 
@@ -553,7 +565,43 @@ function State.tryUnlockRow(y)
     end
   end
   State.unlockedRows = y
+  State.applyUnlockReward(y)
   return true
+end
+
+function State.applyUnlockReward(y)
+  local reward = C.ROW_UNLOCK_REWARDS and C.ROW_UNLOCK_REWARDS[y - C.STARTING_ROWS]
+  if not reward then return end
+  local rowCenterX, rowCenterY = State.tileCenter(math.floor(C.GRID_W * 0.5), y)
+  if reward.money then
+    State.money = State.money + reward.money
+    State.addPopup(rowCenterX, rowCenterY, "+$" .. reward.money)
+  end
+  if reward.robot then
+    local rx = C.GRID_W * 0.5
+    State.robots[#State.robots + 1] = State.newRobot(rx, y, "Till")
+    local sx, sy = State.tileCenter(math.floor(rx), y)
+    State.addPopup(sx, sy, "+1 robot")
+  end
+  if reward.breeder then
+    local rightX = C.GRID_W
+    local left  = State.tileAt(rightX - 2, y)
+    local mid   = State.tileAt(rightX - 1, y)
+    local right = State.tileAt(rightX, y)
+    if left and mid and right then
+      for _, t in ipairs({ left, mid, right }) do
+        if t.crop then
+          State.addCrop(t.crop.pheno.cropIndex, t.crop.pheno.tier)
+          t.crop = nil
+        end
+        t.weed = false
+        t.state = "tilled"
+      end
+      State.registerBreeder(left, mid, right, 0)
+      local cx, cy = State.tileCenter(rightX - 1, y)
+      State.addPopup(cx, cy, "+1 breeder")
+    end
+  end
 end
 
 local function takeLowestTierAtOrAbove(cropIdx, minTier)
@@ -586,6 +634,8 @@ end
 function State.reserveUnlock(y)
   local cost = State.rowUnlockCost(y) or 0
   if State.money < cost then return nil end
+  local robotReq = State.rowUnlockRobotReq(y)
+  if robotReq and #State.robots < robotReq then return nil end
   local reqs = State.rowUnlockReqs(y)
   local taken = {}
   if reqs then

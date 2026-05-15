@@ -9,8 +9,30 @@ local C = {
   ACTION_BTN_H = 56,
   ACTION_BTN_GAP = 6,
 
-  STARTING_ROWS = 3,
-  ROW_UNLOCK_COSTS = { 0, 0, 0, 0, 6000, 12000, 24000, 50000 },
+  STARTING_ROWS = 1,
+  ROW_UNLOCK_COSTS = { 500, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  ROW_UNLOCK_ROBOT_REQS = { [2] = 4 },
+  ROW_UNLOCK_REWARDS = {
+    [1] = { robot = true },
+    [2] = { breeder = true },
+    [3] = { money = 50 },
+    [4] = { money = 100 },
+    [5] = { money = 200 },
+    [6] = { money = 400 },
+    [7] = { money = 800 },
+    [8] = { money = 1500 },
+    [9] = { money = 3000 },
+    [10] = { money = 6000 },
+  },
+
+  WEED_DROP_TOMATO_CHANCE = 0.05,
+  WEED_DROP_CARROT_CHANCE = 0.01,
+
+  STARTER_MONEY = 0,
+  STARTER_INVENTORY = {
+    { crop = 1, tier = 1, count = 3 },
+    { crop = 2, tier = 1, count = 3 },
+  },
 
   HUD_X = 1444,
   HUD_W = 460,
@@ -223,7 +245,7 @@ local C = {
 
   SAVE_FILE = "save.lua",
   SAVE_INTERVAL = 60,
-  SAVE_SCHEMA = 6,
+  SAVE_SCHEMA = 7,
 }
 
 -- Derived lookups: name → index, and recipe lookup by sorted-index key.
@@ -254,11 +276,16 @@ end
 local TIER = {}
 for i, name in ipairs(C.TIER_NAMES) do TIER[name] = i end
 
--- Row unlock crop requirements. Each entry corresponds to rows 4..11 (i.e. starting row + i).
+-- Row unlock crop requirements. Each entry corresponds to rows 2..11 (i.e. starting row + i).
 -- { crop = "Name", tier = "E"-"S", count = N }
+-- Empty entries mean no crop requirement (row 2 = money cost, row 3 = robot count gate).
 local UNLOCK_RAW = {
+  -- Row 2: $500 cost (no crop req)
+  {},
+  -- Row 3: 4 robots gate (no crop req)
+  {},
   -- Row 4
-  { { crop="Tomato",     tier="E", count=3 } },
+  { { crop="Carrot",     tier="C", count=2 } },
   -- Row 5
   { { crop="Carrot",     tier="D", count=5 } },
   -- Row 6

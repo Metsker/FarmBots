@@ -137,6 +137,15 @@ local function performWork(robot, tile, qe)
     end
   elseif task == "Weed" then
     tile.weed = false
+    local cx, cy = State.tileCenter(tile.x, tile.y)
+    if love.math.random() < C.WEED_DROP_TOMATO_CHANCE then
+      State.addCrop(1, 1)
+      State.addCropPopup(cx, cy, 1, 1)
+    end
+    if love.math.random() < C.WEED_DROP_CARROT_CHANCE then
+      State.addCrop(2, 1)
+      State.addCropPopup(cx, cy - 24, 2, 1)
+    end
     if tile.breederId then tryBreedAtStructure(tile.breederId) end
   elseif task == "Harvest" then
     if tile.parentSlot then return end
@@ -161,10 +170,17 @@ local function performWork(robot, tile, qe)
       local left = State.tileAt(qe.payload.leftX, qe.payload.leftY)
       local mid  = State.tileAt(qe.payload.midX,  qe.payload.midY)
       local right= State.tileAt(qe.payload.rightX,qe.payload.rightY)
-      if left and mid and right
-        and left.state == "tilled" and not left.weed and not left.breederId
-        and mid.state  == "tilled" and not mid.weed  and not mid.breederId
-        and right.state== "tilled" and not right.weed and not right.breederId then
+      local blocked = not (left and mid and right)
+        or left.breederId or mid.breederId or right.breederId
+      if not blocked then
+        for _, t in ipairs({ left, mid, right }) do
+          if t.crop then
+            State.addCrop(t.crop.pheno.cropIndex, t.crop.pheno.tier)
+            t.crop = nil
+          end
+          t.weed = false
+          t.state = "tilled"
+        end
         State.registerBreeder(left, mid, right, qe.payload.cost)
       else
         State.money = State.money + (qe.payload.cost or 0)
@@ -209,7 +225,10 @@ local function performWork(robot, tile, qe)
     end
   elseif task == "Unlock" then
     if qe and qe.payload then
-      State.unlockedRows = math.max(State.unlockedRows, tile.y)
+      local y = tile.y
+      local wasLocked = y > State.unlockedRows
+      State.unlockedRows = math.max(State.unlockedRows, y)
+      if wasLocked then State.applyUnlockReward(y) end
     end
   elseif task == "Summon" then
     -- no-op; arrival is the payload

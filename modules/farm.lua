@@ -289,7 +289,7 @@ local function rebuildHudButtons()
     end
   end
 
-  do
+  if State.unlockedRows >= 2 then
     local rcost = State.nextRobotCost()
     local canBuyRobot = State.money >= rcost and #State.robots < C.ROBOT_CAP
     local rLabel = "Buy $" .. rcost
@@ -298,50 +298,21 @@ local function rebuildHudButtons()
       function()
         if canBuyRobot then
           State.money = State.money - rcost
-          State.robots[#State.robots + 1] = State.newRobot(C.GRID_W * 0.5, 1, "Till")
+          State.robots[#State.robots + 1] = State.newRobot(C.GRID_W * 0.5, 2, "Till")
         end
       end,
       { disabled = not canBuyRobot, robotBuy = true, sound = "buy" })
   end
 
-  do
-    local cursorX = hx
+  if State.unlockedRows >= 3 then
     local breederCost = State.nextBreederCost()
     local breederAfford = State.money >= breederCost
     local bLabel = "Buy $" .. breederCost
     local bW = btnW(bLabel, { breederBuy = true })
-    hudBtn("buy_breeder", cursorX, cropsY, bW, BTN_H, bLabel,
+    hudBtn("buy_breeder", hx, cropsY, bW, BTN_H, bLabel,
       function() if breederAfford or State.breederMode then State.toggleBreeder() end end,
       { disabled = not (breederAfford or State.breederMode), breederBuy = true,
         active = State.breederMode, sound = "click" })
-    cursorX = cursorX + bW + BTN_GAP
-
-    local tCost = C.CROPS[1].buyCost
-    local canBuyTomato = State.money >= tCost
-    local tLabel = "Buy $" .. tCost
-    local tW = btnW(tLabel, { cropBuy = 1 })
-    hudBtn("buy_tomato", cursorX, cropsY, tW, BTN_H, tLabel,
-      function()
-        if canBuyTomato then
-          State.money = State.money - tCost
-          State.addBoughtCrop(1, 1)
-        end
-      end,
-      { disabled = not canBuyTomato, cropBuy = 1, sound = "buy" })
-    cursorX = cursorX + tW + BTN_GAP
-
-    local cCost = C.CROPS[2].buyCost
-    local canBuyCarrot = State.money >= cCost
-    local cLabel = "Buy $" .. cCost
-    local cW = btnW(cLabel, { cropBuy = 2 })
-    hudBtn("buy_carrot", cursorX, cropsY, cW, BTN_H, cLabel,
-      function()
-        if canBuyCarrot then
-          State.money = State.money - cCost
-          State.addBoughtCrop(2, 1)
-        end
-      end,
-      { disabled = not canBuyCarrot, cropBuy = 2, sound = "buy" })
   end
 
   for i, key in ipairs(C.FERT_KEYS) do
