@@ -1244,7 +1244,10 @@ local function evaluateTileAction(tile)
     if tile.crop.water <= C.WATER_REFILL_GATE then return "Water" end
     return "Summon"
   end
-  if tile.state == "ripe" then return "Harvest" end
+  if tile.state == "ripe" then
+    if tile.parentSlot then return nil end
+    return "Harvest"
+  end
   if tile.state == "tilled" then return "Summon" end
   return nil
 end
