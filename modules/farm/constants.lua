@@ -152,15 +152,16 @@ local C = {
     "Click", "Zap", "Gear", "Buzz", "Rivet", "Pixel", "Chip", "Spark",
   },
 
-  WEED_SPAWN_MIN_INTERVAL = 15,
-  WEED_SPAWN_MAX_INTERVAL = 22.5,
+  WEED_SPAWN_MIN_INTERVAL = 60,
+  WEED_SPAWN_MAX_INTERVAL = 60,
   WEED_SPAWN_MIN = 1,
-  WEED_SPAWN_MAX = 2,
+  WEED_SPAWN_MAX = 1,
 
   WATER_DRAIN_PER_SEC = 1 / 10,
   WATER_MAX           = 1.0,
   WATER_GROW_GATE     = 0.05,
   WATER_REFILL_GATE   = 0.5,
+  GROW_BASE_RATE      = 0.25,
 
   MUTATION_RATE = 0.03,
 

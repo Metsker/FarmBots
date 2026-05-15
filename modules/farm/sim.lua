@@ -360,18 +360,17 @@ local function tickCrops(dt)
         if not State.tileHasFert(t, "autoWater") then
           t.crop.water = math.max(0, t.crop.water - C.WATER_DRAIN_PER_SEC * dt)
         end
-        if t.crop.water >= C.WATER_GROW_GATE then
-          local boost = 1
-          if State.tileHasFert(t, "growBoost") then
-            boost = State.fertMagnitude("growBoost") or 1
-          end
-          t.crop.growth = t.crop.growth + (dt * boost) / t.crop.pheno.growTime
-          if t.crop.growth >= 1 then
-            t.crop.growth = 1
-            t.state = "ripe"
-            Sounds.play("ripen")
-            if t.breederId then tryBreedAtStructure(t.breederId) end
-          end
+        local boost = 1
+        if State.tileHasFert(t, "growBoost") then
+          boost = State.fertMagnitude("growBoost") or 1
+        end
+        local waterScale = C.GROW_BASE_RATE + (1 - C.GROW_BASE_RATE) * math.min(1, math.max(0, t.crop.water))
+        t.crop.growth = t.crop.growth + (dt * boost * waterScale) / t.crop.pheno.growTime
+        if t.crop.growth >= 1 then
+          t.crop.growth = 1
+          t.state = "ripe"
+          Sounds.play("ripen")
+          if t.breederId then tryBreedAtStructure(t.breederId) end
         end
       end
     end
