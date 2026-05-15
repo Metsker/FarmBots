@@ -42,7 +42,7 @@ local function tileMatchesAutonomousTask(robot, t, task)
         if mid and mid.state ~= "breeder" then return false end
       end
     end
-    return State.firstAvailableTier(cropIdx) ~= nil
+    return State.bestAvailableTier(cropIdx) ~= nil
   end
   return false
 end
@@ -164,9 +164,7 @@ local function performWork(robot, tile, qe)
       else
         local cropIdx = plantCropForTile(robot, tile)
         if cropIdx then
-          local tier = tile.parentSlot
-            and State.bestAvailableTier(cropIdx)
-            or State.firstAvailableTier(cropIdx)
+          local tier = State.bestAvailableTier(cropIdx)
           if tier and State.takeCrop(cropIdx, tier) then
             local genome = Genetics.baseGenome(cropIdx, tier)
             plantPayloadOnTile(tile, { genome = genome })
