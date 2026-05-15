@@ -146,6 +146,12 @@ local C = {
   BREEDER_BASE_COST = 50,
   BREEDER_COST_EXP  = 2.4,
 
+  -- Tile priority lets gameplay features bump certain tiles to the top of
+  -- the autonomous robot scheduler. `rank = distance - priority * weight`,
+  -- so any positive priority overrides distance-based ranking entirely.
+  TILE_PRIORITY_WEIGHT  = 1e6,
+  BREEDER_TILE_PRIORITY = 1,
+
   ROBOT_NAMES = {
     "Beep", "Bop", "Tin", "Rusty", "Cog", "Sprocket", "Bolt", "Whirr",
     "Click", "Zap", "Gear", "Buzz", "Rivet", "Pixel", "Chip", "Spark",

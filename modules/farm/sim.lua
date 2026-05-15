@@ -56,13 +56,7 @@ local function findJobForTask(robot, task, claimed)
       local t = State.tiles[y][x]
       if tileMatchesAutonomousTask(robot, t, task) and not claimed[t] then
         local dx, dy = x - robot.px, y - robot.py
-        local rank = dx*dx + dy*dy
-        if task == "Plant" and t.parentSlot then
-          rank = rank - 1e6
-        end
-        if (task == "Water" or task == "Weed") and t.breederId then
-          rank = rank - 1e6
-        end
+        local rank = dx*dx + dy*dy - (t.priority or 0) * C.TILE_PRIORITY_WEIGHT
         if not bestRank or rank < bestRank then
           bestRank = rank
           best = t

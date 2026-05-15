@@ -212,6 +212,12 @@ function Save.load()
       midX = b.midX, midY = b.midY,
       rightX = b.rightX, rightY = b.rightY,
     }
+    -- Priority is derived from breeder placement, not persisted directly,
+    -- so re-apply it after the registry is rebuilt.
+    for _, coord in ipairs({ { b.leftX, b.leftY }, { b.midX, b.midY }, { b.rightX, b.rightY } }) do
+      local tt = State.tileAt(coord[1], coord[2])
+      if tt then tt.priority = C.BREEDER_TILE_PRIORITY end
+    end
   end
   State.nextBreederId = data.nextBreederId or 1
 

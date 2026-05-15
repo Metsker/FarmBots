@@ -10,6 +10,7 @@ local function newTile(x, y)
     weed = false,
     growth = 0,
     water = 0,
+    priority = 0,
   }
 end
 
@@ -385,14 +386,17 @@ function State.registerBreeder(leftTile, midTile, rightTile, cost)
   leftTile.breederId = id
   leftTile.breederRole = "left"
   leftTile.parentSlot = { crop = nil }
+  leftTile.priority = C.BREEDER_TILE_PRIORITY
   rightTile.breederId = id
   rightTile.breederRole = "right"
   rightTile.parentSlot = { crop = nil }
+  rightTile.priority = C.BREEDER_TILE_PRIORITY
   midTile.breederId = id
   midTile.breederRole = "middle"
   midTile.breederMiddle = true
   midTile.state = "breeder"
   midTile.crop = nil
+  midTile.priority = C.BREEDER_TILE_PRIORITY
   State.breeders[id] = {
     id = id,
     cost = cost or 0,
@@ -418,6 +422,7 @@ function State.clearBreederTile(t)
   t.breederMiddle = nil
   t.parentSlot = nil
   t.crop = nil
+  t.priority = 0
   if t.state == "breeder" then
     t.state = "tilled"
   end
