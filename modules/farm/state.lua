@@ -56,7 +56,8 @@ function State.init()
 
   State._usedNames = {}
   State.robots = {
-    State.newRobot(C.GRID_W * 0.5, 1, "Till"),
+    State.newRobot(C.GRID_W * 0.5 - 1, 1, "Till"),
+    State.newRobot(C.GRID_W * 0.5 + 1, 1, "Till"),
   }
 
   for _, item in ipairs(C.STARTER_INVENTORY or {}) do

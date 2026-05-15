@@ -10,7 +10,7 @@ local C = {
   ACTION_BTN_GAP = 6,
 
   STARTING_ROWS = 1,
-  ROW_UNLOCK_COSTS = { 500, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  ROW_UNLOCK_COSTS = { 250, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
   ROW_UNLOCK_ROBOT_REQS = { [2] = 4 },
   ROW_UNLOCK_REWARDS = {
     [1] = { robot = true },
