@@ -80,7 +80,7 @@ local function pickClosestEmpty(robot)
   for y = 1, State.unlockedRows do
     for x = 1, C.GRID_W do
       local t = State.tiles[y][x]
-      if t.state == "wild" or t.state == "tilled" then
+      if (t.state == "wild" or t.state == "tilled") and not t.parentSlot then
         local dx, dy = x - robot.px, y - robot.py
         local d = dx*dx + dy*dy
         if not bestDist or d < bestDist then
