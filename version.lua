@@ -1,1 +1,1 @@
-return { date = "dev", n = 0, sha = "dev" }
+return { n = 0, sha = "dev" }
