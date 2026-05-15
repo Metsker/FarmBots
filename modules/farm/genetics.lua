@@ -75,9 +75,16 @@ function Genetics.rollHarvestQty(cropIdx, tier)
 end
 
 function Genetics.cross(parentA, parentB)
+  local color = pickColor(parentA.color, parentB.color)
+  local tier
+  if color ~= parentA.color and color ~= parentB.color then
+    tier = 1
+  else
+    tier = rollImprove(math.max(parentA.tier, parentB.tier))
+  end
   return {
-    tier  = rollImprove(math.max(parentA.tier, parentB.tier)),
-    color = pickColor(parentA.color, parentB.color),
+    tier  = tier,
+    color = color,
   }
 end
 
