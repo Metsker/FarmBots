@@ -32,6 +32,16 @@ local function tileMatchesAutonomousTask(robot, t, task)
     if t.state ~= "tilled" or t.weed then return false end
     local cropIdx = plantCropForTile(robot, t)
     if not cropIdx then return false end
+    if t.parentSlot and t.breederId then
+      local b = State.breeders and State.breeders[t.breederId]
+      if b then
+        local mid = State.tileAt(b.midX, b.midY)
+        -- Hold off replanting parents while the middle still has a cross
+        -- product; planting is only safe when the middle is back to empty
+        -- "breeder" state (harvested or dug out).
+        if mid and mid.state ~= "breeder" then return false end
+      end
+    end
     return State.firstAvailableTier(cropIdx) ~= nil
   end
   return false
@@ -48,6 +58,9 @@ local function findJobForTask(robot, task, claimed)
         local dx, dy = x - robot.px, y - robot.py
         local rank = dx*dx + dy*dy
         if task == "Plant" and t.parentSlot then
+          rank = rank - 1e6
+        end
+        if (task == "Water" or task == "Weed") and t.breederId then
           rank = rank - 1e6
         end
         if not bestRank or rank < bestRank then
