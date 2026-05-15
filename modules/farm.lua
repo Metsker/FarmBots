@@ -5,6 +5,9 @@ local Genetics = require("farm.genetics")
 local Sounds = require("farm.sounds")
 local Save = require("farm.save")
 local Modals = require("farm.modals")
+local ok, Version = pcall(require, "version")
+if not ok then Version = { date = "dev", n = 0, sha = "dev" } end
+local VERSION_LABEL = string.format("v %s.%d", Version.date, Version.n)
 local Farm = {}
 
 
@@ -1217,7 +1220,7 @@ local function drawHudTooltip()
 end
 
 local function drawVersion()
-  local label = "version: " .. os.date("%H:%M  %Y-%m-%d")
+  local label = VERSION_LABEL
   love.graphics.setFont(fontUISmall)
   local w = fontUISmall:getWidth(label)
   love.graphics.setColor(0, 0, 0, 0.45)

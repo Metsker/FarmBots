@@ -30,7 +30,8 @@ jobs:
         run: |
           SHA=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%d)
-          printf 'return { sha = "%s", date = "%s" }\n' "$SHA" "$DATE" > version.lua
+          N=$(git log --since="${DATE} 00:00 UTC" --until="${DATE} 23:59 UTC" --oneline origin/main | wc -l | tr -d ' ')
+          printf 'return { date = "%s", n = %s, sha = "%s" }\n' "$DATE" "$N" "$SHA" > version.lua
           cat version.lua
 
       - name: Build .love archive
