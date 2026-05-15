@@ -5,11 +5,8 @@ local Genetics = require("farm.genetics")
 local Sounds = require("farm.sounds")
 local Save = require("farm.save")
 local Modals = require("farm.modals")
-local Version = require("version")
-
 local Farm = {}
 
-local versionLabel = string.format("build %s %s", Version.sha or "?", Version.date or "?")
 
 local fontEmoji
 local fontEmojiBig
@@ -56,7 +53,7 @@ local BTN_GAP = 6
 local function btnW(label, opts)
   opts = opts or {}
   local textW = fontUI and fontUI:getWidth(label or "") or 60
-  if opts.cropBuy or opts.robotBuy
+  if opts.cropBuy or opts.robotBuy or opts.breederBuy
     or opts.fertApply or opts.fertBuy then
     return BTN_EMOJI_LEAD + textW + BTN_PAD
   end
@@ -118,13 +115,6 @@ local function rebuildHudButtons()
   actionBtn("act_pointer", C.POINT_EMOJI,
     function() State.clearModes() end,
     { active = pointyActive })
-
-  local breederCost = State.nextBreederCost()
-  local breederAfford = State.money >= breederCost
-  actionBtn("act_breeder", C.BREEDER_EMOJI,
-    function() if breederAfford then State.toggleBreeder() end end,
-    { active = State.breederMode, disabled = not breederAfford,
-      costLabel = "$" .. breederCost })
 
   for _, key in ipairs(C.FERT_KEYS) do
     local def = C.FERTILIZERS[key]
@@ -316,6 +306,16 @@ local function rebuildHudButtons()
 
   do
     local cursorX = hx
+    local breederCost = State.nextBreederCost()
+    local breederAfford = State.money >= breederCost
+    local bLabel = "Buy $" .. breederCost
+    local bW = btnW(bLabel, { breederBuy = true })
+    hudBtn("buy_breeder", cursorX, cropsY, bW, BTN_H, bLabel,
+      function() if breederAfford or State.breederMode then State.toggleBreeder() end end,
+      { disabled = not (breederAfford or State.breederMode), breederBuy = true,
+        active = State.breederMode, sound = "click" })
+    cursorX = cursorX + bW + BTN_GAP
+
     local tCost = C.CROPS[1].buyCost
     local canBuyTomato = State.money >= tCost
     local tLabel = "Buy $" .. tCost
@@ -1054,6 +1054,11 @@ local function drawHud()
       love.graphics.setFont(fontUI)
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(b.label, b.x + 44, b.y + 10)
+    elseif b.opts.breederBuy then
+      drawCenteredEmojiTinted(fontEmojiBig, C.BREEDER_EMOJI, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE, { 0.95, 0.75, 1.00 })
+      love.graphics.setFont(fontUI)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.print(b.label, b.x + 44, b.y + 10)
     elseif b.opts.fertApply or b.opts.fertBuy then
       local key = b.opts.fertApply or b.opts.fertBuy
       local def = C.FERTILIZERS[key]
@@ -1088,19 +1093,6 @@ local function drawHud()
         love.graphics.setColor(0, 0, 0, 0.7)
         love.graphics.rectangle("fill", b.x + b.w - tw - 8, b.y + b.h - 16, tw + 6, 14, 3, 3)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(txt, b.x + b.w - tw - 5, b.y + b.h - 16)
-      end
-      if b.opts.costLabel then
-        love.graphics.setFont(fontUISmall)
-        local txt = b.opts.costLabel
-        local tw = fontUISmall:getWidth(txt)
-        love.graphics.setColor(0, 0, 0, 0.7)
-        love.graphics.rectangle("fill", b.x + b.w - tw - 8, b.y + b.h - 16, tw + 6, 14, 3, 3)
-        if b.opts.disabled then
-          love.graphics.setColor(0.95, 0.55, 0.55, 1)
-        else
-          love.graphics.setColor(1, 0.95, 0.55, 1)
-        end
         love.graphics.print(txt, b.x + b.w - tw - 5, b.y + b.h - 16)
       end
     elseif b.opts.plantCropEmoji then
@@ -1233,12 +1225,13 @@ local function drawHudTooltip()
 end
 
 local function drawVersion()
+  local label = "version: " .. os.date("%H:%M  %Y-%m-%d")
   love.graphics.setFont(fontUISmall)
-  local w = fontUISmall:getWidth(versionLabel)
+  local w = fontUISmall:getWidth(label)
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 1920 - w - 10, 0, w + 10, 18)
   love.graphics.setColor(1, 1, 1, 0.85)
-  love.graphics.print(versionLabel, 1920 - w - 6, 3)
+  love.graphics.print(label, 1920 - w - 6, 3)
 end
 
 function Farm.draw()
