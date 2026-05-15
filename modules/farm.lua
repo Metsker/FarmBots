@@ -283,16 +283,20 @@ local function rebuildHudButtons()
     if rowY + 32 > invTop and rowY < invTop + viewportH then
       local cropInfo = C.CROPS[row.crop]
       local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
+      local sellable = cropInfo.buyCost == nil
       local idCrop = row.crop .. "_" .. row.tier
       local selected = (State.selectedCropIdx == row.crop and State.selectedCropTier == row.tier)
-      hudBtn("invc_" .. idCrop, hx, rowY, infoBtnW, 32,
+      local infoW = sellable and infoBtnW or hw
+      hudBtn("invc_" .. idCrop, hx, rowY, infoW, 32,
         "",
         function() State.toggleCrop(row.crop, row.tier) end,
         { cropRow = row, selected = selected, rowClip = "crops" })
-      hudBtn("invc_sell_" .. idCrop, hx + infoBtnW + 4, rowY, sellBtnW, 32,
-        "Sell $" .. price,
-        function() State.sellOne(row.crop, row.tier) end,
-        { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true, rowClip = "crops" })
+      if sellable then
+        hudBtn("invc_sell_" .. idCrop, hx + infoBtnW + 4, rowY, sellBtnW, 32,
+          "Sell $" .. price,
+          function() State.sellOne(row.crop, row.tier) end,
+          { sellLabel = true, sound = "sell", holdRepeat = true, centerLabel = true, rowClip = "crops" })
+      end
     end
   end
 

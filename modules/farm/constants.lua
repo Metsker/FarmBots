@@ -115,8 +115,8 @@ local C = {
     "Click", "Zap", "Gear", "Buzz", "Rivet", "Pixel", "Chip", "Spark",
   },
 
-  WEED_SPAWN_MIN_INTERVAL = 10,
-  WEED_SPAWN_MAX_INTERVAL = 15,
+  WEED_SPAWN_MIN_INTERVAL = 15,
+  WEED_SPAWN_MAX_INTERVAL = 22.5,
   WEED_SPAWN_MIN = 1,
   WEED_SPAWN_MAX = 2,
 
