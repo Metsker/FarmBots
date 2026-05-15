@@ -15,7 +15,6 @@ end
 
 function State.init()
   State.money = 100
-  State.sticks = 2
   State.digToggle = false
   State.time  = 0
   State.weedTimer = C.WEED_SPAWN_MAX_INTERVAL
@@ -34,8 +33,7 @@ function State.init()
     State.fertLevel[k] = 1
   end
   State.fertMode = nil
-  State.stickMode = false
-  State.restrictMode = false
+  State.breederMode = false
   State.openDropdown = nil
   State.openModal = nil
   State.discovered = {}
@@ -52,6 +50,9 @@ function State.init()
 
   State.crops = {}
   State.boughtCrops = {}
+
+  State.breeders = {}
+  State.nextBreederId = 1
 
   State._usedNames = {}
   State.robots = {
@@ -274,15 +275,9 @@ end
 function State.clearModes()
   State.digToggle = false
   State.fertMode = nil
-  State.stickMode = false
-  State.restrictMode = false
+  State.breederMode = false
   State.selectedCropIdx = nil
   State.selectedCropTier = nil
-end
-
-function State.toggleRestrict()
-  if State.restrictMode then State.restrictMode = false
-  else State.clearModes(); State.restrictMode = true end
 end
 
 function State.toggleCrop(cropIdx, tier)
@@ -342,9 +337,90 @@ function State.toggleFert(key)
   else State.clearModes(); State.fertMode = key end
 end
 
-function State.toggleStick()
-  if State.stickMode then State.stickMode = false
-  else State.clearModes(); State.stickMode = true end
+function State.toggleBreeder()
+  if State.breederMode then State.breederMode = false
+  else State.clearModes(); State.breederMode = true end
+end
+
+function State.nextBreederCost()
+  local n = 0
+  for _ in pairs(State.breeders or {}) do n = n + 1 end
+  for _, r in ipairs(State.robots) do
+    if r.activeQE and r.activeQE.task == "PlaceBreeder" then n = n + 1 end
+    if r.queue then
+      for _, qe in ipairs(r.queue) do
+        if qe.task == "PlaceBreeder" then n = n + 1 end
+      end
+    end
+  end
+  return math.floor(C.BREEDER_BASE_COST * (C.BREEDER_COST_EXP ^ n))
+end
+
+function State.canPlaceBreederAt(cx, cy)
+  if cx <= 1 or cx >= C.GRID_W then return nil end
+  if cy < 1 or cy > State.unlockedRows then return nil end
+  local left = State.tileAt(cx - 1, cy)
+  local mid  = State.tileAt(cx,     cy)
+  local right = State.tileAt(cx + 1, cy)
+  if not (left and mid and right) then return nil end
+  for _, t in ipairs({ left, mid, right }) do
+    if t.state ~= "tilled" then return nil end
+    if t.weed then return nil end
+    if t.crop then return nil end
+    if t.breederId then return nil end
+  end
+  return left, mid, right
+end
+
+function State.registerBreeder(leftTile, midTile, rightTile)
+  local id = State.nextBreederId
+  State.nextBreederId = id + 1
+  leftTile.breederId = id
+  leftTile.breederRole = "left"
+  leftTile.parentSlot = { crop = nil }
+  rightTile.breederId = id
+  rightTile.breederRole = "right"
+  rightTile.parentSlot = { crop = nil }
+  midTile.breederId = id
+  midTile.breederRole = "middle"
+  midTile.breederMiddle = true
+  midTile.state = "breeder"
+  midTile.crop = nil
+  State.breeders[id] = {
+    id = id,
+    leftX = leftTile.x, leftY = leftTile.y,
+    midX = midTile.x, midY = midTile.y,
+    rightX = rightTile.x, rightY = rightTile.y,
+  }
+  return id
+end
+
+function State.breederTiles(id)
+  local b = State.breeders and State.breeders[id]
+  if not b then return nil end
+  return State.tileAt(b.leftX, b.leftY),
+         State.tileAt(b.midX, b.midY),
+         State.tileAt(b.rightX, b.rightY)
+end
+
+function State.clearBreederTile(t)
+  if not t then return end
+  t.breederId = nil
+  t.breederRole = nil
+  t.breederMiddle = nil
+  t.parentSlot = nil
+  t.crop = nil
+  if t.state == "breeder" then
+    t.state = "tilled"
+  end
+end
+
+function State.removeBreeder(id)
+  local left, mid, right = State.breederTiles(id)
+  State.clearBreederTile(left)
+  State.clearBreederTile(mid)
+  State.clearBreederTile(right)
+  if State.breeders then State.breeders[id] = nil end
 end
 
 function State.recordDiscovery(recipeIdx)
@@ -430,12 +506,16 @@ function State.takeCrop(cropIdx, tier)
   return true
 end
 
+function State.cropPrice(cropIdx)
+  local cropInfo = C.CROPS[cropIdx]
+  if not cropInfo then return 0 end
+  return math.floor(C.BASE_PRICE * (cropInfo.priceMult or 1))
+end
+
 function State.sellOne(cropIdx, tier)
   if State.sellableCount(cropIdx, tier) <= 0 then return 0 end
   local byCrop = State.crops[cropIdx]
-  local cropInfo = C.CROPS[cropIdx]
-  local mult = cropInfo.yieldMult or 1
-  local price = math.floor(C.YIELD_TIER_VALUES[tier] * mult)
+  local price = State.cropPrice(cropIdx)
   byCrop[tier] = byCrop[tier] - 1
   if byCrop[tier] <= 0 then byCrop[tier] = nil end
   State.money = State.money + price
@@ -559,8 +639,8 @@ local function refundQE(qe)
   local p = qe.payload
   if task == "Plant" and p then
     State.addCrop(p.cropIdx, p.tier)
-  elseif task == "PlaceStick" then
-    State.sticks = State.sticks + 1
+  elseif task == "PlaceBreeder" and p then
+    State.money = State.money + (p.cost or 0)
   elseif task == "Fertilize" and p then
     State.fertInventory[p.key] = (State.fertInventory[p.key] or 0) + 1
   elseif task == "Unlock" and p then

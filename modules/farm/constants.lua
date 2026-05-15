@@ -19,30 +19,34 @@ local C = {
   TASKS = { "Till", "Water", "Weed", "Harvest", "Plant" },
   POINT_EMOJI = "👆",
 
+  -- priceMult: price scalar per crop (price-per-unit = BASE_PRICE * priceMult).
+  -- yieldMult: per-crop multiplier on top of the tier quantity curve (default 1).
   CROPS = {
-    { name="Tomato",     emoji="🍅", color={1.00, 0.30, 0.22}, buyCost = 5,  yieldMult = 1 },
-    { name="Carrot",     emoji="🥕", color={1.00, 0.55, 0.15}, buyCost = 10, yieldMult = 2 },
-    { name="Cucumber",   emoji="🥒", color={0.45, 0.80, 0.35}, yieldMult = 3 },
-    { name="Corn",       emoji="🌽", color={1.00, 0.85, 0.30}, yieldMult = 3 },
-    { name="Chili",      emoji="🌶", color={0.95, 0.20, 0.20}, yieldMult = 3 },
-    { name="Eggplant",   emoji="🍆", color={0.65, 0.35, 0.80}, yieldMult = 5 },
-    { name="Broccoli",   emoji="🥦", color={0.30, 0.65, 0.35}, yieldMult = 4 },
-    { name="Strawberry", emoji="🍓", color={1.00, 0.40, 0.50}, yieldMult = 3 },
-    { name="Watermelon", emoji="🍉", color={0.55, 0.85, 0.55}, yieldMult = 5 },
-    { name="Pineapple",  emoji="🍍", color={1.00, 0.85, 0.25}, yieldMult = 5 },
-    { name="Avocado",    emoji="🥑", color={0.55, 0.75, 0.35}, yieldMult = 7 },
-    { name="Coconut",    emoji="🥥", color={0.75, 0.55, 0.30}, yieldMult = 10 },
-    { name="Onion",      emoji="🧅", color={0.95, 0.80, 0.55}, yieldMult = 2 },
-    { name="Pepper",     emoji="🫑", color={0.35, 0.75, 0.40}, yieldMult = 3 },
-    { name="Garlic",     emoji="🧄", color={0.95, 0.92, 0.85}, yieldMult = 3 },
-    { name="Cherry",     emoji="🍒", color={0.85, 0.15, 0.25}, yieldMult = 3 },
-    { name="Mushroom",   emoji="🍄", color={0.75, 0.30, 0.30}, yieldMult = 4 },
-    { name="Grapes",     emoji="🍇", color={0.55, 0.35, 0.75}, yieldMult = 4 },
-    { name="Lemon",      emoji="🍋", color={1.00, 0.95, 0.30}, yieldMult = 4 },
-    { name="Pumpkin",    emoji="🎃", color={1.00, 0.55, 0.10}, yieldMult = 5 },
-    { name="Banana",     emoji="🍌", color={1.00, 0.90, 0.40}, yieldMult = 6 },
-    { name="Mango",      emoji="🥭", color={1.00, 0.70, 0.20}, yieldMult = 8 },
+    { name="Tomato",     emoji="🍅", color={1.00, 0.30, 0.22}, buyCost = 5,  priceMult = 1,  yieldMult = 1 },
+    { name="Carrot",     emoji="🥕", color={1.00, 0.55, 0.15}, buyCost = 10, priceMult = 2,  yieldMult = 1 },
+    { name="Cucumber",   emoji="🥒", color={0.45, 0.80, 0.35}, priceMult = 3,  yieldMult = 1 },
+    { name="Corn",       emoji="🌽", color={1.00, 0.85, 0.30}, priceMult = 3,  yieldMult = 1 },
+    { name="Chili",      emoji="🌶", color={0.95, 0.20, 0.20}, priceMult = 3,  yieldMult = 1 },
+    { name="Eggplant",   emoji="🍆", color={0.65, 0.35, 0.80}, priceMult = 5,  yieldMult = 1 },
+    { name="Broccoli",   emoji="🥦", color={0.30, 0.65, 0.35}, priceMult = 4,  yieldMult = 1 },
+    { name="Strawberry", emoji="🍓", color={1.00, 0.40, 0.50}, priceMult = 3,  yieldMult = 1 },
+    { name="Watermelon", emoji="🍉", color={0.55, 0.85, 0.55}, priceMult = 5,  yieldMult = 1 },
+    { name="Pineapple",  emoji="🍍", color={1.00, 0.85, 0.25}, priceMult = 5,  yieldMult = 1 },
+    { name="Avocado",    emoji="🥑", color={0.55, 0.75, 0.35}, priceMult = 7,  yieldMult = 1 },
+    { name="Coconut",    emoji="🥥", color={0.75, 0.55, 0.30}, priceMult = 10, yieldMult = 1 },
+    { name="Onion",      emoji="🧅", color={0.95, 0.80, 0.55}, priceMult = 2,  yieldMult = 1 },
+    { name="Pepper",     emoji="🫑", color={0.35, 0.75, 0.40}, priceMult = 3,  yieldMult = 1 },
+    { name="Garlic",     emoji="🧄", color={0.95, 0.92, 0.85}, priceMult = 3,  yieldMult = 1 },
+    { name="Cherry",     emoji="🍒", color={0.85, 0.15, 0.25}, priceMult = 3,  yieldMult = 1 },
+    { name="Mushroom",   emoji="🍄", color={0.75, 0.30, 0.30}, priceMult = 4,  yieldMult = 1 },
+    { name="Grapes",     emoji="🍇", color={0.55, 0.35, 0.75}, priceMult = 4,  yieldMult = 1 },
+    { name="Lemon",      emoji="🍋", color={1.00, 0.95, 0.30}, priceMult = 4,  yieldMult = 1 },
+    { name="Pumpkin",    emoji="🎃", color={1.00, 0.55, 0.10}, priceMult = 5,  yieldMult = 1 },
+    { name="Banana",     emoji="🍌", color={1.00, 0.90, 0.40}, priceMult = 6,  yieldMult = 1 },
+    { name="Mango",      emoji="🥭", color={1.00, 0.70, 0.20}, priceMult = 8,  yieldMult = 1 },
   },
+
+  BASE_PRICE = 10,
 
   TIER_NAMES = { "E", "D", "C", "B", "A", "S" },
   TIER_COLORS = {
@@ -53,7 +57,17 @@ local C = {
     { 0.30, 0.80, 0.95 },
     { 0.95, 0.45, 0.95 },
   },
-  YIELD_TIER_VALUES    = { 10, 20, 36, 60, 100, 160 },
+  -- Per-tier harvest quantity distribution.
+  -- Each entry is { {qty, cumulative_chance}, ... }. Roll a single uniform
+  -- random and return the first qty whose cumulative chance >= roll.
+  YIELD_TIER_DIST = {
+    [1] = { {1, 0.75}, {2, 1.00} },                    -- E: avg 1.25
+    [2] = { {1, 0.50}, {2, 1.00} },                    -- D: avg 1.5
+    [3] = { {1, 0.25}, {2, 0.75}, {3, 1.00} },         -- C: avg 2.0
+    [4] = { {2, 0.25}, {3, 0.75}, {4, 1.00} },         -- B: avg 3.0
+    [5] = { {3, 0.25}, {4, 0.75}, {5, 1.00} },         -- A: avg 4.0
+    [6] = { {5, 0.25}, {6, 0.75}, {7, 1.00} },         -- S: avg 6.0
+  },
   GROWTIME_TIER_VALUES = { 40, 30, 22, 16, 12, 8 },
 
   CROP_RECIPES = {
@@ -91,7 +105,7 @@ local C = {
   WORK_TIME = {
     Till=2.0, Water=1.5, Weed=1.5,
     Harvest=1.0, Plant=1.0,
-    PlaceStick=0.8, Fertilize=0.6, Dig=1.0,
+    PlaceBreeder=1.5, Fertilize=0.6, Dig=1.0,
     Unlock=1.5, Summon=0,
   },
 
@@ -108,7 +122,9 @@ local C = {
 
   SEED_BASE_COST = 50,
   SEED_COST_EXP  = 1,
-  STICK_COST     = 5,
+
+  BREEDER_BASE_COST = 50,
+  BREEDER_COST_EXP  = 2.4,
 
   ROBOT_NAMES = {
     "Beep", "Bop", "Tin", "Rusty", "Cog", "Sprocket", "Bolt", "Whirr",
@@ -127,37 +143,37 @@ local C = {
 
   MUTATION_RATE = 0.03,
 
-  STICK_EMOJI = "🪵",
-  WEED_EMOJI  = "🌿",
-  ROBOT_EMOJI = "🤖",
+  BREEDER_EMOJI = "🧬",
+  WEED_EMOJI    = "🌿",
+  ROBOT_EMOJI   = "🤖",
   BESTIARY_EMOJI = "📖",
 
   TASK_GLYPH = {
-    Idle       = "💤",
-    Till       = "🚜",
-    Water      = "💧",
-    Weed       = "🪓",
-    Harvest    = "🌾",
-    Plant      = "🌱",
-    PlaceStick = "🪵",
-    Fertilize  = "🧪",
-    Dig        = "🪏",
-    Unlock     = "🔓",
-    Summon     = "👆",
+    Idle         = "💤",
+    Till         = "🚜",
+    Water        = "💧",
+    Weed         = "🪓",
+    Harvest      = "🌾",
+    Plant        = "🌱",
+    PlaceBreeder = "🧬",
+    Fertilize    = "🧪",
+    Dig          = "🪏",
+    Unlock       = "🔓",
+    Summon       = "👆",
   },
 
   TASK_TINT = {
-    Idle       = { 0.7, 0.7, 0.9 },
-    Till       = { 1.00, 0.65, 0.15 },
-    Water      = { 0.30, 0.65, 1.00 },
-    Weed       = { 0.70, 0.50, 0.25 },
-    Harvest    = { 1.00, 0.85, 0.30 },
-    Plant      = { 0.45, 0.90, 0.40 },
-    PlaceStick = { 0.95, 0.75, 0.40 },
-    Fertilize  = { 0.85, 0.65, 1.00 },
-    Dig        = { 0.85, 0.50, 0.35 },
-    Unlock     = { 0.95, 0.85, 0.40 },
-    Summon     = { 0.85, 0.85, 0.95 },
+    Idle         = { 0.7, 0.7, 0.9 },
+    Till         = { 1.00, 0.65, 0.15 },
+    Water        = { 0.30, 0.65, 1.00 },
+    Weed         = { 0.70, 0.50, 0.25 },
+    Harvest      = { 1.00, 0.85, 0.30 },
+    Plant        = { 0.45, 0.90, 0.40 },
+    PlaceBreeder = { 0.85, 0.55, 1.00 },
+    Fertilize    = { 0.85, 0.65, 1.00 },
+    Dig          = { 0.85, 0.50, 0.35 },
+    Unlock       = { 0.95, 0.85, 0.40 },
+    Summon       = { 0.85, 0.85, 0.95 },
   },
 
   WEED_TINT = { 0.08, 0.22, 0.06 },
@@ -207,7 +223,7 @@ local C = {
 
   SAVE_FILE = "save.lua",
   SAVE_INTERVAL = 60,
-  SAVE_SCHEMA = 5,
+  SAVE_SCHEMA = 6,
 }
 
 -- Derived lookups: name → index, and recipe lookup by sorted-index key.

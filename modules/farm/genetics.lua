@@ -43,11 +43,11 @@ end
 
 function Genetics.phenotype(g)
   local cropInfo = C.CROPS[g.color]
-  local mult = cropInfo.yieldMult or 1
   local tier = g.tier
+  local priceMult = cropInfo.priceMult or 1
   return {
     tier         = tier,
-    yield        = math.floor(C.YIELD_TIER_VALUES[tier] * mult),
+    price        = math.floor(C.BASE_PRICE * priceMult),
     growTime     = C.GROWTIME_TIER_VALUES[tier],
     cropIndex    = g.color,
     name         = cropInfo.name,
@@ -55,6 +55,23 @@ function Genetics.phenotype(g)
     tint         = cropInfo.color or { 1, 1, 1 },
     tierLabel    = C.TIER_NAMES[tier],
   }
+end
+
+-- Roll the number of crops dropped on a harvest. Random per call.
+-- `yieldMult` (per-crop scalar, default 1) multiplies the tier-rolled qty.
+function Genetics.rollHarvestQty(cropIdx, tier)
+  local dist = C.YIELD_TIER_DIST[tier]
+  if not dist then return 1 end
+  local roll = love.math.random()
+  local base = 1
+  for _, entry in ipairs(dist) do
+    if roll <= entry[2] then
+      base = entry[1]
+      break
+    end
+  end
+  local mult = (C.CROPS[cropIdx] and C.CROPS[cropIdx].yieldMult) or 1
+  return base * mult
 end
 
 function Genetics.cross(parentA, parentB)

@@ -56,8 +56,8 @@ local BTN_GAP = 6
 local function btnW(label, opts)
   opts = opts or {}
   local textW = fontUI and fontUI:getWidth(label or "") or 60
-  if opts.cropBuy or opts.robotBuy or opts.stickLabel or opts.stickBuy
-    or opts.fertApply or opts.fertBuy or opts.stickApply then
+  if opts.cropBuy or opts.robotBuy
+    or opts.fertApply or opts.fertBuy then
     return BTN_EMOJI_LEAD + textW + BTN_PAD
   end
   return textW + BTN_PAD * 2
@@ -113,15 +113,18 @@ local function rebuildHudButtons()
     actionCursor = actionCursor + C.ACTION_BTN_W + C.ACTION_BTN_GAP
   end
 
-  local pointyActive = not (State.stickMode or State.fertMode or State.digToggle
-                            or State.restrictMode or State.selectedCropIdx)
+  local pointyActive = not (State.breederMode or State.fertMode or State.digToggle
+                            or State.selectedCropIdx)
   actionBtn("act_pointer", C.POINT_EMOJI,
     function() State.clearModes() end,
     { active = pointyActive })
 
-  actionBtn("act_stick", C.STICK_EMOJI,
-    function() if State.sticks > 0 then State.toggleStick() end end,
-    { active = State.stickMode, disabled = State.sticks <= 0, count = State.sticks })
+  local breederCost = State.nextBreederCost()
+  local breederAfford = State.money >= breederCost
+  actionBtn("act_breeder", C.BREEDER_EMOJI,
+    function() if breederAfford then State.toggleBreeder() end end,
+    { active = State.breederMode, disabled = not breederAfford,
+      costLabel = "$" .. breederCost })
 
   for _, key in ipairs(C.FERT_KEYS) do
     local def = C.FERTILIZERS[key]
@@ -134,10 +137,6 @@ local function rebuildHudButtons()
   actionBtn("act_shovel", "🪏",
     function() State.toggleDig() end,
     { active = State.digToggle })
-
-  actionBtn("act_restrict", "🚫",
-    function() State.toggleRestrict() end,
-    { active = State.restrictMode })
 
   local helpY = 1080 - 60
   local rowH56 = 56
@@ -282,7 +281,7 @@ local function rebuildHudButtons()
     local rowY = invTop + (i - 1) * rowH - State.cropScroll
     if rowY + 32 > invTop and rowY < invTop + viewportH then
       local cropInfo = C.CROPS[row.crop]
-      local price = math.floor(C.YIELD_TIER_VALUES[row.tier] * (cropInfo.yieldMult or 1))
+      local price = State.cropPrice(row.crop)
       local sellable = State.sellableCount(row.crop, row.tier) > 0
       local idCrop = row.crop .. "_" .. row.tier
       local selected = (State.selectedCropIdx == row.crop and State.selectedCropTier == row.tier)
@@ -317,19 +316,6 @@ local function rebuildHudButtons()
 
   do
     local cursorX = hx
-    local canBuyStick = State.money >= C.STICK_COST
-    local sBuyLabel = "Buy $" .. C.STICK_COST
-    local sBuyW = btnW(sBuyLabel, { stickBuy = true })
-    hudBtn("buy_stick", cursorX, cropsY, sBuyW, BTN_H, sBuyLabel,
-      function()
-        if canBuyStick then
-          State.money = State.money - C.STICK_COST
-          State.sticks = State.sticks + 1
-        end
-      end,
-      { disabled = not canBuyStick, stickBuy = true, sound = "buy" })
-    cursorX = cursorX + sBuyW + BTN_GAP
-
     local tCost = C.CROPS[1].buyCost
     local canBuyTomato = State.money >= tCost
     local tLabel = "Buy $" .. tCost
@@ -380,9 +366,48 @@ local function rebuildHudButtons()
       { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "fertUp", key = key } })
   end
 
+  if State.openDropdown and string.sub(State.openDropdown, 1, 11) == "parentslot_" then
+    local _, _, txStr, tyStr = string.find(State.openDropdown, "^parentslot_(%d+)_(%d+)$")
+    local tx, ty = tonumber(txStr), tonumber(tyStr)
+    local tile = (tx and ty) and State.tileAt(tx, ty) or nil
+    if tile and tile.parentSlot then
+      local popW = math.max(btnW("Watermelon"), 140)
+      local sx, sy = State.tileToScreen(tile.x, tile.y)
+      local popX = sx + C.TILE - 4
+      if popX + popW > C.HUD_X - 16 then popX = sx - popW + 4 end
+      local popY = sy
+      pendingPopups[#pendingPopups + 1] = {
+        kind = "parentSlot", tile = tile, x = popX, y = popY, w = popW,
+      }
+    else
+      State.openDropdown = nil
+    end
+  end
+
   for _, pop in ipairs(pendingPopups) do
     local popY = pop.y
-    if pop.kind == "plantCrop" then
+    if pop.kind == "parentSlot" then
+      local tile = pop.tile
+      hudBtn("parentslot_pop_" .. tile.x .. "_" .. tile.y .. "_none", pop.x, popY, pop.w, BTN_H, "—",
+        function()
+          tile.parentSlot.crop = nil
+          State.openDropdown = nil
+        end,
+        { active = (tile.parentSlot.crop == nil), popupItem = true })
+      popY = popY + BTN_H + 2
+      for cropIdx, cinfo in ipairs(C.CROPS) do
+        local inStock = State.firstAvailableTier(cropIdx) ~= nil
+        if inStock or tile.parentSlot.crop == cropIdx then
+          hudBtn("parentslot_pop_" .. tile.x .. "_" .. tile.y .. "_" .. cropIdx, pop.x, popY, pop.w, BTN_H, cinfo.name,
+            function()
+              tile.parentSlot.crop = cropIdx
+              State.openDropdown = nil
+            end,
+            { active = (tile.parentSlot.crop == cropIdx), popupItem = true, plantCropEmoji = cinfo.emoji, plantCropTint = cinfo.color })
+          popY = popY + BTN_H + 2
+        end
+      end
+    elseif pop.kind == "plantCrop" then
       hudBtn("plantcrop_pop_" .. pop.robotIdx .. "_none", pop.x, popY, pop.w, BTN_H, "—",
         function()
           pop.robotRef.plantCrop = nil
@@ -547,7 +572,7 @@ local function tileFill(t)
   if t.state == "wild"   then return 0.28, 0.50, 0.22 end
   if t.state == "tilled" then return 0.45, 0.30, 0.18 end
   if t.state == "growing" or t.state == "ripe" then return 0.38, 0.27, 0.17 end
-  if t.state == "stick"  then return 0.42, 0.28, 0.18 end
+  if t.state == "breeder" then return 0.40, 0.30, 0.45 end
   return 0.2, 0.2, 0.2
 end
 
@@ -606,13 +631,6 @@ local function drawGrid()
           love.graphics.setColor(1, 0.3, 0.9, 1)
           love.graphics.circle("fill", sx + C.TILE - 10, sy + C.TILE - 9, 4)
         end
-      end
-
-      if t.restrict then
-        love.graphics.setColor(1, 0.5, 0.5, 0.85)
-        love.graphics.setLineWidth(2)
-        love.graphics.rectangle("line", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
-        love.graphics.setLineWidth(1)
       end
 
       if t.ferts then
@@ -748,28 +766,35 @@ local function drawGrid()
     end
   end
 
-  for y = 1, State.unlockedRows do
-    for x = 1, C.GRID_W do
-      local t = State.tiles[y][x]
-      if t.state == "stick" then
-        local sx, sy = State.tileToScreen(x, y)
-        local cx, cy = sx + C.TILE * 0.5, sy + C.TILE * 0.5
-        local sw, sh = 9, 62
-        local spacing = 20
-        -- dark outline for contrast
-        love.graphics.setColor(0.10, 0.06, 0.02, 1)
-        love.graphics.rectangle("fill", cx - spacing - sw * 0.5 - 1, cy - sh * 0.5 - 1, sw + 2, sh + 2, 3, 3)
-        love.graphics.rectangle("fill", cx + spacing - sw * 0.5 - 1, cy - sh * 0.5 - 1, sw + 2, sh + 2, 3, 3)
-        -- bright tan vertical sticks
-        love.graphics.setColor(0.95, 0.75, 0.40, 1)
-        love.graphics.rectangle("fill", cx - spacing - sw * 0.5, cy - sh * 0.5, sw, sh, 2, 2)
-        love.graphics.rectangle("fill", cx + spacing - sw * 0.5, cy - sh * 0.5, sw, sh, 2, 2)
-        -- crossbar
-        local cw = spacing * 2 + sw
-        love.graphics.setColor(0.10, 0.06, 0.02, 1)
-        love.graphics.rectangle("fill", cx - cw * 0.5 - 1, cy - 5, cw + 2, 8, 3, 3)
-        love.graphics.setColor(1.00, 0.85, 0.45, 1)
-        love.graphics.rectangle("fill", cx - cw * 0.5, cy - 4, cw, 6, 2, 2)
+  for _, b in pairs(State.breeders or {}) do
+    local lx, ly = State.tileToScreen(b.leftX, b.leftY)
+    local rx, ry = State.tileToScreen(b.rightX, b.rightY)
+    local x0 = lx + 4
+    local y0 = ly + 4
+    local x1 = rx + C.TILE - 4
+    local y1 = ry + C.TILE - 4
+    love.graphics.setColor(0.85, 0.55, 1.00, 0.85)
+    love.graphics.setLineWidth(3)
+    love.graphics.rectangle("line", x0, y0, x1 - x0, y1 - y0, 10, 10)
+    love.graphics.setLineWidth(1)
+
+    local mid = State.tileAt(b.midX, b.midY)
+    if mid and mid.state == "breeder" then
+      local mx, my = State.tileCenter(b.midX, b.midY)
+      drawCenteredEmojiTinted(fontEmojiHuge, C.BREEDER_EMOJI, mx, my, C.TILE * 0.6 / EMOJI_NATIVE, { 0.95, 0.75, 1.00 })
+    end
+
+    local left = State.tileAt(b.leftX, b.leftY)
+    local right = State.tileAt(b.rightX, b.rightY)
+    for _, parent in ipairs({ left, right }) do
+      if parent and parent.parentSlot and parent.parentSlot.crop
+         and (parent.state == "tilled" or parent.state == "wild") then
+        local cropInfo = C.CROPS[parent.parentSlot.crop]
+        if cropInfo then
+          local pcx, pcy = State.tileCenter(parent.x, parent.y)
+          local tint = { cropInfo.color[1], cropInfo.color[2], cropInfo.color[3], 0.35 }
+          drawCenteredEmojiTinted(fontEmojiHuge, cropInfo.emoji, pcx, pcy, C.TILE * 0.5 / EMOJI_NATIVE, tint)
+        end
       end
     end
   end
@@ -785,16 +810,15 @@ local function drawGrid()
       else
         cr, cg, cb, ca = 0.6, 0.3, 0.3, 0.20
       end
-    elseif State.restrictMode then
-      cr, cg, cb, ca = 1, 0.4, 0.4, 0.3
-    elseif State.stickMode then
-      if t.state == "tilled" then
-        cr, cg, cb, ca = 0.95, 0.75, 0.40, 0.35
+    elseif State.breederMode then
+      local lf, mf, rf = State.canPlaceBreederAt(t.x, t.y)
+      if lf and mf and rf then
+        cr, cg, cb, ca = 0.4, 0.95, 0.4, 0.35
       else
-        cr, cg, cb, ca = 0.7, 0.3, 0.3, 0.3
+        cr, cg, cb, ca = 0.95, 0.3, 0.3, 0.30
       end
     elseif State.fertMode then
-      if t.state == "tilled" or t.state == "growing" or t.state == "ripe" or t.state == "stick" then
+      if t.state == "tilled" or t.state == "growing" or t.state == "ripe" or t.state == "breeder" then
         local tt = C.FERTILIZERS[State.fertMode].tint
         cr, cg, cb, ca = tt[1], tt[2], tt[3], 0.35
       else
@@ -811,8 +835,19 @@ local function drawGrid()
     else
       cr, cg, cb, ca = 0.5, 0.5, 0.5, 0.12
     end
-    love.graphics.setColor(cr, cg, cb, ca)
-    love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+    if State.breederMode then
+      for ox = -1, 1 do
+        local px = t.x + ox
+        if px >= 1 and px <= C.GRID_W and t.y <= State.unlockedRows then
+          local psx, psy = State.tileToScreen(px, t.y)
+          love.graphics.setColor(cr, cg, cb, ca)
+          love.graphics.rectangle("fill", psx + 2, psy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+        end
+      end
+    else
+      love.graphics.setColor(cr, cg, cb, ca)
+      love.graphics.rectangle("fill", sx + 2, sy + 2, C.TILE - 4, C.TILE - 4, 6, 6)
+    end
   end
 
   for y = 1, C.GRID_H do
@@ -861,7 +896,7 @@ local function drawCropTooltip()
 
   lineY = lineY + 20
   love.graphics.setColor(0.85, 0.85, 0.9, 1)
-  love.graphics.print(string.format("Price: %d$", ph.yield), px + 10, lineY)
+  love.graphics.print(string.format("Price: %d$", ph.price), px + 10, lineY)
   lineY = lineY + 20
   love.graphics.print(string.format("Grow: %ds", ph.growTime), px + 10, lineY)
 
@@ -1008,11 +1043,6 @@ local function drawHud()
       tx = tx + tierW + gap2
       love.graphics.setColor(0.9, 0.9, 0.95, 1)
       love.graphics.print(countStr, tx, ty)
-    elseif b.opts.stickLabel then
-      drawCenteredEmoji(fontEmojiBig, C.STICK_EMOJI, b.x + 18, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
-      love.graphics.setFont(fontUI)
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.print(b.label, b.x + 44, b.y + 10)
     elseif b.opts.cropBuy then
       local crop = C.CROPS[b.opts.cropBuy]
       drawCenteredEmojiTinted(fontEmojiBig, crop.emoji, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE, crop.color)
@@ -1024,20 +1054,10 @@ local function drawHud()
       love.graphics.setFont(fontUI)
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(b.label, b.x + 44, b.y + 10)
-    elseif b.opts.stickBuy then
-      drawCenteredEmoji(fontEmojiBig, C.STICK_EMOJI, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
-      love.graphics.setFont(fontUI)
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.print(b.label, b.x + 44, b.y + 10)
     elseif b.opts.fertApply or b.opts.fertBuy then
       local key = b.opts.fertApply or b.opts.fertBuy
       local def = C.FERTILIZERS[key]
       drawCenteredEmojiTinted(fontEmojiBig, def.emoji, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE, def.tint)
-      love.graphics.setFont(fontUI)
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.print(b.label, b.x + 44, b.y + 10)
-    elseif b.opts.stickApply then
-      drawCenteredEmoji(fontEmojiBig, C.STICK_EMOJI, b.x + 20, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
       love.graphics.setFont(fontUI)
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(b.label, b.x + 44, b.y + 10)
@@ -1068,6 +1088,19 @@ local function drawHud()
         love.graphics.setColor(0, 0, 0, 0.7)
         love.graphics.rectangle("fill", b.x + b.w - tw - 8, b.y + b.h - 16, tw + 6, 14, 3, 3)
         love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.print(txt, b.x + b.w - tw - 5, b.y + b.h - 16)
+      end
+      if b.opts.costLabel then
+        love.graphics.setFont(fontUISmall)
+        local txt = b.opts.costLabel
+        local tw = fontUISmall:getWidth(txt)
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", b.x + b.w - tw - 8, b.y + b.h - 16, tw + 6, 14, 3, 3)
+        if b.opts.disabled then
+          love.graphics.setColor(0.95, 0.55, 0.55, 1)
+        else
+          love.graphics.setColor(1, 0.95, 0.55, 1)
+        end
         love.graphics.print(txt, b.x + b.w - tw - 5, b.y + b.h - 16)
       end
     elseif b.opts.plantCropEmoji then
@@ -1126,7 +1159,7 @@ local function drawHud()
   love.graphics.setColor(0.55, 0.55, 0.65, 1)
   love.graphics.print("LMB: queue robot to act on tile (active toggle or contextual).", C.HUD_X, helpY)
   love.graphics.print("RMB: cancel queued/active task on tile (refunds reservation).", C.HUD_X, helpY + 16)
-  love.graphics.print("Toggles: pointer / stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
+  love.graphics.print("Toggles: pointer / breeder / fert / shovel. Breeder = 3-wide cross.", C.HUD_X, helpY + 32)
 
 end
 
@@ -1280,25 +1313,39 @@ local function queueOrFlash(tile, task, payload, refund)
 end
 
 local function handleLMB(tile)
-  if State.restrictMode then
-    tile.restrict = not tile.restrict
-    Sounds.play("click")
-    return
-  end
-
-  if State.stickMode and tile.state == "tilled" and State.sticks > 0 then
-    State.sticks = State.sticks - 1
-    local ok = queueOrFlash(tile, "PlaceStick", {}, function()
-      State.sticks = State.sticks + 1
+  if State.breederMode then
+    local left, mid, right = State.canPlaceBreederAt(tile.x, tile.y)
+    if not (left and mid and right) then
+      flashTile(tile)
+      return
+    end
+    local cost = State.nextBreederCost()
+    if State.money < cost then
+      flashTile(tile)
+      return
+    end
+    State.money = State.money - cost
+    local payload = {
+      cost = cost,
+      leftX = left.x, leftY = left.y,
+      midX = mid.x, midY = mid.y,
+      rightX = right.x, rightY = right.y,
+    }
+    local ok = queueOrFlash(mid, "PlaceBreeder", payload, function()
+      State.money = State.money + cost
     end)
-    if ok and State.sticks <= 0 then State.stickMode = false end
+    if ok then
+      if State.money < State.nextBreederCost() then
+        State.breederMode = false
+      end
+    end
     return
   end
 
   if State.fertMode then
     local key = State.fertMode
     local applyOK = (tile.state == "tilled" or tile.state == "growing"
-                     or tile.state == "ripe" or tile.state == "stick")
+                     or tile.state == "ripe" or tile.state == "breeder")
     if applyOK and (State.fertInventory[key] or 0) > 0 then
       State.fertInventory[key] = State.fertInventory[key] - 1
       local ok = queueOrFlash(tile, "Fertilize", { key = key }, function()
@@ -1309,13 +1356,25 @@ local function handleLMB(tile)
     end
   end
 
-  if State.digToggle and (tile.crop or tile.state == "stick") then
+  if State.digToggle and (tile.crop or tile.state == "breeder" or tile.breederId) then
     queueOrFlash(tile, "Dig", nil)
     return
   end
 
+  -- Empty parent slot: open the crop-assignment dropdown.
+  if tile.parentSlot and tile.state == "tilled" and not tile.crop then
+    local ddKey = "parentslot_" .. tile.x .. "_" .. tile.y
+    if State.openDropdown == ddKey then
+      State.openDropdown = nil
+    else
+      State.openDropdown = ddKey
+    end
+    Sounds.play("click")
+    return
+  end
+
   if State.selectedCropIdx and State.selectedCropTier
-     and tile.state == "tilled" and not tile.crop then
+     and tile.state == "tilled" and not tile.crop and not tile.parentSlot then
     local cropIdx, tier = State.selectedCropIdx, State.selectedCropTier
     if State.takeCrop(cropIdx, tier) then
       local genome = Genetics.baseGenome(cropIdx, tier)
@@ -1328,6 +1387,12 @@ local function handleLMB(tile)
       end
       return
     end
+  end
+
+  if tile.parentSlot and tile.state == "ripe" then
+    -- Parents are bred, not harvested manually — do nothing.
+    flashTile(tile)
+    return
   end
 
   local task = evaluateTileAction(tile)

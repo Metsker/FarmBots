@@ -5,6 +5,18 @@ local Sounds = require("farm.sounds")
 
 local Sim = {}
 
+local function plantCropForTile(robot, t)
+  -- Returns the cropIdx to plant on this tile, or nil if this robot
+  -- shouldn't service it. Parent slots dictate their own crop; a robot
+  -- with no plantCrop is a generalist that fills any configured slot.
+  local slotCrop = t.parentSlot and t.parentSlot.crop
+  if slotCrop then
+    if robot.plantCrop and robot.plantCrop ~= slotCrop then return nil end
+    return slotCrop
+  end
+  return robot.plantCrop
+end
+
 local function tileMatchesAutonomousTask(robot, t, task)
   if task == "Till" then
     return t.state == "wild" and not t.weed
@@ -13,11 +25,14 @@ local function tileMatchesAutonomousTask(robot, t, task)
   elseif task == "Weed" then
     return t.weed and true or false
   elseif task == "Harvest" then
-    return t.state == "ripe"
+    if t.state ~= "ripe" then return false end
+    if t.parentSlot then return false end
+    return true
   elseif task == "Plant" then
-    if t.state ~= "tilled" or t.restrict or t.weed then return false end
-    if not robot.plantCrop then return false end
-    return State.firstAvailableTier(robot.plantCrop) ~= nil
+    if t.state ~= "tilled" or t.weed then return false end
+    local cropIdx = plantCropForTile(robot, t)
+    if not cropIdx then return false end
+    return State.firstAvailableTier(cropIdx) ~= nil
   end
   return false
 end
@@ -85,6 +100,28 @@ local function plantPayloadOnTile(tile, payload)
   tile.state = "growing"
 end
 
+local tryBreedAtStructure  -- forward decl, defined below
+
+local function harvestTile(tile)
+  if tile.state ~= "ripe" or not tile.crop then return end
+  local ph = tile.crop.pheno
+  local qty = Genetics.rollHarvestQty(ph.cropIndex, ph.tier)
+  for _ = 1, qty do
+    State.addCrop(ph.cropIndex, ph.tier)
+  end
+  local cx, cy = State.tileCenter(tile.x, tile.y)
+  State.addCropPopup(cx, cy, ph.cropIndex, ph.tier)
+  if qty > 1 then
+    State.addPopup(cx, cy - 28, "x" .. qty)
+  end
+  tile.crop = nil
+  if tile.breederMiddle then
+    tile.state = "breeder"
+  else
+    tile.state = "tilled"
+  end
+end
+
 local function performWork(robot, tile, qe)
   local task = (qe and qe.task) or robot.activeTask or robot.task
   if task == "Till" then
@@ -97,39 +134,44 @@ local function performWork(robot, tile, qe)
     end
   elseif task == "Weed" then
     tile.weed = false
+    if tile.breederId then tryBreedAtStructure(tile.breederId) end
   elseif task == "Harvest" then
-    if tile.state == "ripe" and tile.crop then
-      local ph = tile.crop.pheno
-      State.addCrop(ph.cropIndex, ph.tier)
-      local cx, cy = State.tileCenter(tile.x, tile.y)
-      State.addCropPopup(cx, cy, ph.cropIndex, ph.tier)
-      tile.crop = nil
-      tile.state = "tilled"
-    end
+    if tile.parentSlot then return end
+    harvestTile(tile)
   elseif task == "Plant" then
     if tile.state == "tilled" and not tile.crop then
       if qe and qe.payload then
         plantPayloadOnTile(tile, qe.payload)
-      elseif robot.plantCrop then
-        local tier = State.firstAvailableTier(robot.plantCrop)
-        if tier and State.takeCrop(robot.plantCrop, tier) then
-          local genome = Genetics.baseGenome(robot.plantCrop, tier)
-          plantPayloadOnTile(tile, { genome = genome })
+      else
+        local cropIdx = plantCropForTile(robot, tile)
+        if cropIdx then
+          local tier = State.firstAvailableTier(cropIdx)
+          if tier and State.takeCrop(cropIdx, tier) then
+            local genome = Genetics.baseGenome(cropIdx, tier)
+            plantPayloadOnTile(tile, { genome = genome })
+          end
         end
       end
     end
-  elseif task == "PlaceStick" then
-    if tile.state == "tilled" then
-      tile.state = "stick"
-      tile.crop = nil
-    else
-      State.sticks = State.sticks + 1
+  elseif task == "PlaceBreeder" then
+    if qe and qe.payload then
+      local left = State.tileAt(qe.payload.leftX, qe.payload.leftY)
+      local mid  = State.tileAt(qe.payload.midX,  qe.payload.midY)
+      local right= State.tileAt(qe.payload.rightX,qe.payload.rightY)
+      if left and mid and right
+        and left.state == "tilled" and not left.weed and not left.breederId
+        and mid.state  == "tilled" and not mid.weed  and not mid.breederId
+        and right.state== "tilled" and not right.weed and not right.breederId then
+        State.registerBreeder(left, mid, right)
+      else
+        State.money = State.money + (qe.payload.cost or 0)
+      end
     end
   elseif task == "Fertilize" then
     if qe and qe.payload and qe.payload.key then
       local key = qe.payload.key
       local applyOK = (tile.state == "tilled" or tile.state == "growing"
-                       or tile.state == "ripe" or tile.state == "stick")
+                       or tile.state == "ripe" or tile.state == "breeder")
       if applyOK then
         State.fertInventory[key] = (State.fertInventory[key] or 0) + 1
         State.applyFert(tile, key)
@@ -138,12 +180,11 @@ local function performWork(robot, tile, qe)
       end
     end
   elseif task == "Dig" then
-    if tile.crop then
+    if tile.breederId then
+      State.removeBreeder(tile.breederId)
+    elseif tile.crop then
       State.addCrop(tile.crop.pheno.cropIndex, tile.crop.pheno.tier)
       tile.crop = nil
-      tile.state = "tilled"
-    elseif tile.state == "stick" then
-      State.sticks = State.sticks + 1
       tile.state = "tilled"
     end
   elseif task == "Unlock" then
@@ -255,28 +296,21 @@ local function updateRobot(robot, dt)
   end
 end
 
-local NEIGHBOR_OFFSETS = { {1,0}, {-1,0}, {0,1}, {0,-1} }
-
-local function tryBreedAtRipen(ripeTile)
-  for _, off in ipairs(NEIGHBOR_OFFSETS) do
-    local stick = State.tileAt(ripeTile.x + off[1], ripeTile.y + off[2])
-    if stick and stick.state == "stick" and not stick.weed then
-      local mates = {}
-      for _, off2 in ipairs(NEIGHBOR_OFFSETS) do
-        local m = State.tileAt(stick.x + off2[1], stick.y + off2[2])
-        if m and m ~= ripeTile and m.state == "ripe" and m.crop then
-          mates[#mates + 1] = m
-        end
-      end
-      if #mates > 0 then
-        local mate = mates[love.math.random(1, #mates)]
-        local genome = Genetics.cross(ripeTile.crop.genome, mate.crop.genome)
-        local pheno = Genetics.phenotype(genome)
-        stick.crop = { genome = genome, pheno = pheno, growth = 0, water = 1.0, hybrid = true }
-        stick.state = "growing"
-      end
-    end
-  end
+tryBreedAtStructure = function(id)
+  if not id then return end
+  local left, mid, right = State.breederTiles(id)
+  if not (left and mid and right) then return end
+  if mid.state ~= "breeder" or mid.weed then return end
+  if left.state ~= "ripe" or not left.crop then return end
+  if right.state ~= "ripe" or not right.crop then return end
+  local genome = Genetics.cross(left.crop.genome, right.crop.genome)
+  local pheno = Genetics.phenotype(genome)
+  mid.crop = { genome = genome, pheno = pheno, growth = 0, water = 1.0, hybrid = true }
+  mid.state = "growing"
+  left.crop = nil
+  left.state = "tilled"
+  right.crop = nil
+  right.state = "tilled"
 end
 
 local function tickCrops(dt)
@@ -297,7 +331,7 @@ local function tickCrops(dt)
             t.crop.growth = 1
             t.state = "ripe"
             Sounds.play("ripen")
-            tryBreedAtRipen(t)
+            if t.breederId then tryBreedAtStructure(t.breederId) end
           end
         end
       end
@@ -318,7 +352,7 @@ local function tickWeeds(dt)
       for x = 1, C.GRID_W do
         local t = State.tiles[y][x]
         if not t.weed
-          and (t.state == "wild" or t.state == "tilled" or t.state == "stick")
+          and (t.state == "wild" or t.state == "tilled" or t.state == "breeder")
           and not State.tileHasFert(t, "weedShield") then
           eligible[#eligible + 1] = t
         end

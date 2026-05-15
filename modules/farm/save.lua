@@ -46,7 +46,6 @@ local function snapshotTiles()
       local t = State.tiles[y][x]
       local rec = { s = t.state }
       if t.weed then rec.w = true end
-      if t.restrict then rec.r = true end
       if t.crop then
         rec.c = {
           g = t.crop.genome,
@@ -54,6 +53,12 @@ local function snapshotTiles()
           wa = t.crop.water,
           h = t.crop.hybrid and true or nil,
         }
+      end
+      if t.breederId then rec.b = t.breederId end
+      if t.breederRole then rec.br = t.breederRole end
+      if t.breederMiddle then rec.bm = true end
+      if t.parentSlot then
+        rec.ps = { crop = t.parentSlot.crop }
       end
       if t.ferts then
         local f = {}
@@ -68,6 +73,19 @@ local function snapshotTiles()
       end
       out[y][x] = rec
     end
+  end
+  return out
+end
+
+local function snapshotBreeders()
+  local out = {}
+  for id, b in pairs(State.breeders or {}) do
+    out[#out + 1] = {
+      id = id,
+      leftX = b.leftX, leftY = b.leftY,
+      midX = b.midX, midY = b.midY,
+      rightX = b.rightX, rightY = b.rightY,
+    }
   end
   return out
 end
@@ -100,7 +118,6 @@ function Save.save()
   local data = {
     schema = C.SAVE_SCHEMA,
     money = State.money,
-    sticks = State.sticks,
     time = State.time,
     weedTimer = State.weedTimer,
     unlockedRows = State.unlockedRows,
@@ -112,6 +129,8 @@ function Save.save()
     boughtCrops = State.boughtCrops,
     robots = snapshotRobots(),
     tiles = snapshotTiles(),
+    breeders = snapshotBreeders(),
+    nextBreederId = State.nextBreederId,
   }
   love.filesystem.write(C.SAVE_FILE, "return " .. serialize(data))
 end
@@ -132,7 +151,6 @@ function Save.load()
   end
 
   State.money = data.money or 0
-  State.sticks = data.sticks or 0
   State.time = data.time or 0
   State.weedTimer = data.weedTimer or C.WEED_SPAWN_MAX_INTERVAL
   State.unlockedRows = data.unlockedRows or C.STARTING_ROWS
@@ -154,7 +172,6 @@ function Save.load()
       if rec then
         t.state = rec.s or "wild"
         t.weed = rec.w == true
-        t.restrict = rec.r == true
         if rec.c then
           t.crop = {
             genome = rec.c.g,
@@ -165,6 +182,12 @@ function Save.load()
           }
         else
           t.crop = nil
+        end
+        if rec.b then t.breederId = rec.b end
+        if rec.br then t.breederRole = rec.br end
+        if rec.bm then t.breederMiddle = true end
+        if rec.ps then
+          t.parentSlot = { crop = rec.ps.crop }
         end
         if rec.f then
           local ferts = {}
@@ -178,6 +201,17 @@ function Save.load()
       end
     end
   end
+
+  State.breeders = {}
+  for _, b in ipairs(data.breeders or {}) do
+    State.breeders[b.id] = {
+      id = b.id,
+      leftX = b.leftX, leftY = b.leftY,
+      midX = b.midX, midY = b.midY,
+      rightX = b.rightX, rightY = b.rightY,
+    }
+  end
+  State.nextBreederId = data.nextBreederId or 1
 
   State.robots = {}
   for _, rd in ipairs(data.robots or {}) do
