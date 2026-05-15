@@ -76,14 +76,17 @@ local function snapshotRobots()
   local out = {}
   for _, r in ipairs(State.robots) do
     local q = {}
-    for _, tile in ipairs(r.queue or {}) do
-      q[#q + 1] = { tile.x, tile.y }
+    for _, qe in ipairs(r.queue or {}) do
+      if qe.tile then
+        q[#q + 1] = { x = qe.tile.x, y = qe.tile.y, task = qe.task, payload = qe.payload }
+      end
     end
     out[#out + 1] = {
       name = r.name,
       px = r.px, py = r.py,
       task = r.task,
       task2 = r.task2,
+      plantCrop = r.plantCrop,
       level = r.level or 1,
       speed = r.speed or C.ROBOT_SPEED,
       color = r.color,
@@ -184,17 +187,21 @@ function Save.load()
     r.targetTy = rd.py
     r.task = rd.task or "Till"
     r.task2 = rd.task2
+    r.plantCrop = rd.plantCrop
     r.level = rd.level or 1
     r.speed = rd.speed or C.ROBOT_SPEED
     r.color = rd.color or r.color
     r.queue = {}
     for _, qc in ipairs(rd.queue or {}) do
-      local tile = State.tileAt(qc[1], qc[2])
-      if tile then r.queue[#r.queue + 1] = tile end
+      local tile = State.tileAt(qc.x, qc.y)
+      if tile and qc.task then
+        r.queue[#r.queue + 1] = { tile = tile, task = qc.task, payload = qc.payload }
+      end
     end
     r.state = "idle"
     r.idleTimer = 0
     r.activeTask = nil
+    r.activeQE = nil
     r.workTile = nil
     r.workTimer = 0
     State.robots[#State.robots + 1] = r

@@ -16,7 +16,8 @@ local C = {
   HUD_W = 460,
   HUD_OY = 32,
 
-  TASKS = { "Till", "Water", "Weed", "Replant" },
+  TASKS = { "Till", "Water", "Weed", "Harvest", "Plant" },
+  POINT_EMOJI = "👆",
 
   CROPS = {
     { name="Tomato",     emoji="🍅", color={1.00, 0.30, 0.22}, buyCost = 5,  yieldMult = 1 },
@@ -87,7 +88,12 @@ local C = {
     { a="Lemon",      b="Mango",      result="Coconut",    chance=0.18 },
   },
 
-  WORK_TIME = { Till=2.0, Water=1.5, Weed=1.5, Replant=1.0 },
+  WORK_TIME = {
+    Till=2.0, Water=1.5, Weed=1.5,
+    Harvest=1.0, Plant=1.0,
+    PlaceStick=0.8, Fertilize=0.6, Dig=1.0,
+    Unlock=1.5, Summon=0,
+  },
 
   ROBOT_SPEED       = 2,
   ROBOT_SPEED_UP    = 3,
@@ -127,19 +133,31 @@ local C = {
   BESTIARY_EMOJI = "📖",
 
   TASK_GLYPH = {
-    Idle    = "💤",
-    Till    = "🚜",
-    Water   = "💧",
-    Weed    = "🪓",
-    Replant = "🌾",
+    Idle       = "💤",
+    Till       = "🚜",
+    Water      = "💧",
+    Weed       = "🪓",
+    Harvest    = "🌾",
+    Plant      = "🌱",
+    PlaceStick = "🪵",
+    Fertilize  = "🧪",
+    Dig        = "🪏",
+    Unlock     = "🔓",
+    Summon     = "👆",
   },
 
   TASK_TINT = {
-    Idle    = { 0.7, 0.7, 0.9 },
-    Till    = { 1.00, 0.65, 0.15 },
-    Water   = { 0.30, 0.65, 1.00 },
-    Weed    = { 0.70, 0.50, 0.25 },
-    Replant = { 1.00, 0.85, 0.30 },
+    Idle       = { 0.7, 0.7, 0.9 },
+    Till       = { 1.00, 0.65, 0.15 },
+    Water      = { 0.30, 0.65, 1.00 },
+    Weed       = { 0.70, 0.50, 0.25 },
+    Harvest    = { 1.00, 0.85, 0.30 },
+    Plant      = { 0.45, 0.90, 0.40 },
+    PlaceStick = { 0.95, 0.75, 0.40 },
+    Fertilize  = { 0.85, 0.65, 1.00 },
+    Dig        = { 0.85, 0.50, 0.35 },
+    Unlock     = { 0.95, 0.85, 0.40 },
+    Summon     = { 0.85, 0.85, 0.95 },
   },
 
   WEED_TINT = { 0.08, 0.22, 0.06 },
@@ -189,7 +207,7 @@ local C = {
 
   SAVE_FILE = "save.lua",
   SAVE_INTERVAL = 60,
-  SAVE_SCHEMA = 3,
+  SAVE_SCHEMA = 4,
 }
 
 -- Derived lookups: name → index, and recipe lookup by sorted-index key.

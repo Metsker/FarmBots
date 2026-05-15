@@ -113,6 +113,12 @@ local function rebuildHudButtons()
     actionCursor = actionCursor + C.ACTION_BTN_W + C.ACTION_BTN_GAP
   end
 
+  local pointyActive = not (State.stickMode or State.fertMode or State.digToggle
+                            or State.restrictMode or State.selectedCropIdx)
+  actionBtn("act_pointer", C.POINT_EMOJI,
+    function() State.clearModes() end,
+    { active = pointyActive })
+
   actionBtn("act_stick", C.STICK_EMOJI,
     function() if State.sticks > 0 then State.toggleStick() end end,
     { active = State.stickMode, disabled = State.sticks <= 0, count = State.sticks })
@@ -202,11 +208,36 @@ local function rebuildHudButtons()
     if State.openDropdown == ddKey2 then
       pendingPopups[#pendingPopups + 1] = {
         robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = tk2W,
-        taskList = { "None", "Till", "Water", "Weed", "Replant" },
+        taskList = { "None", "Till", "Water", "Weed", "Harvest", "Plant" },
         kind = "fallback",
       }
     end
     cursorX = cursorX + tk2W + BTN_GAP
+
+    if r.task == "Plant" or r.task2 == "Plant" then
+      local pcLabel
+      if r.plantCrop then
+        local cinfo = C.CROPS[r.plantCrop]
+        pcLabel = cinfo and cinfo.name or "?"
+      else
+        pcLabel = "—"
+      end
+      local pcW = math.max(btnW("Watermelon"), btnW(pcLabel))
+      local ddKeyPC = "plantcrop_" .. i
+      hudBtn("robot_plantcrop_" .. i, cursorX, rowY, pcW, BTN_H, pcLabel,
+        function()
+          if State.openDropdown == ddKeyPC then State.openDropdown = nil
+          else State.openDropdown = ddKeyPC end
+        end,
+        { active = (State.openDropdown == ddKeyPC), dropdownTrigger = ddKeyPC, dim = r.plantCrop == nil, rowClip = "robots" })
+      if State.openDropdown == ddKeyPC then
+        pendingPopups[#pendingPopups + 1] = {
+          robotIdx = i, robotRef = r, x = cursorX, y = rowY + BTN_H + 4, w = pcW,
+          kind = "plantCrop",
+        }
+      end
+      cursorX = cursorX + pcW + BTN_GAP
+    end
 
     local upCost = State.robotUpgradeCost(r)
     local speedLabel = "Lv" .. (r.level or 1) .. " $" .. upCost
@@ -218,16 +249,7 @@ local function rebuildHudButtons()
 
     local qCount = r.queue and #r.queue or 0
     hudBtn("robot_clear_" .. i, cursorX, rowY, BTN_H, BTN_H, "",
-      function()
-        r.queue = {}
-        if r.activeTask then
-          r.activeTask = nil
-          r.workTile = nil
-          r.workTimer = 0
-          r.state = "idle"
-          r.idleTimer = 0
-        end
-      end,
+      function() State.clearRobotQueue(r) end,
       { disabled = qCount <= 0, clearIcon = true, rowClip = "robots" })
     end
   end
@@ -356,27 +378,51 @@ local function rebuildHudButtons()
 
   for _, pop in ipairs(pendingPopups) do
     local popY = pop.y
-    for ti, taskName in ipairs(pop.taskList) do
-      local current
-      if pop.kind == "fallback" then
-        current = pop.robotRef.task2 or "None"
-      else
-        current = pop.robotRef.task
-      end
-      local idPrefix = (pop.kind == "fallback") and "task2_pop_" or "task_pop_"
-      hudBtn(idPrefix .. pop.robotIdx .. "_" .. ti, pop.x, popY, pop.w, BTN_H, taskName,
+    if pop.kind == "plantCrop" then
+      hudBtn("plantcrop_pop_" .. pop.robotIdx .. "_none", pop.x, popY, pop.w, BTN_H, "—",
         function()
-          if pop.kind == "fallback" then
-            pop.robotRef.task2 = (taskName == "None") and nil or taskName
-          else
-            pop.robotRef.task = taskName
-            pop.robotRef.state = "idle"
-            pop.robotRef.idleTimer = 0
-          end
+          pop.robotRef.plantCrop = nil
           State.openDropdown = nil
         end,
-        { active = (current == taskName), popupItem = true })
+        { active = (pop.robotRef.plantCrop == nil), popupItem = true })
       popY = popY + BTN_H + 2
+      for cropIdx, cinfo in ipairs(C.CROPS) do
+        local inStock = State.firstAvailableTier(cropIdx) ~= nil
+        if inStock or pop.robotRef.plantCrop == cropIdx then
+          hudBtn("plantcrop_pop_" .. pop.robotIdx .. "_" .. cropIdx, pop.x, popY, pop.w, BTN_H, cinfo.name,
+            function()
+              pop.robotRef.plantCrop = cropIdx
+              pop.robotRef.state = "idle"
+              pop.robotRef.idleTimer = 0
+              State.openDropdown = nil
+            end,
+            { active = (pop.robotRef.plantCrop == cropIdx), popupItem = true, plantCropEmoji = cinfo.emoji, plantCropTint = cinfo.color })
+          popY = popY + BTN_H + 2
+        end
+      end
+    else
+      for ti, taskName in ipairs(pop.taskList) do
+        local current
+        if pop.kind == "fallback" then
+          current = pop.robotRef.task2 or "None"
+        else
+          current = pop.robotRef.task
+        end
+        local idPrefix = (pop.kind == "fallback") and "task2_pop_" or "task_pop_"
+        hudBtn(idPrefix .. pop.robotIdx .. "_" .. ti, pop.x, popY, pop.w, BTN_H, taskName,
+          function()
+            if pop.kind == "fallback" then
+              pop.robotRef.task2 = (taskName == "None") and nil or taskName
+            else
+              pop.robotRef.task = taskName
+              pop.robotRef.state = "idle"
+              pop.robotRef.idleTimer = 0
+            end
+            State.openDropdown = nil
+          end,
+          { active = (current == taskName), popupItem = true })
+        popY = popY + BTN_H + 2
+      end
     end
   end
 
@@ -593,6 +639,36 @@ local function drawGrid()
           end
         end
       end
+      end
+    end
+  end
+
+  for _, r in ipairs(State.robots) do
+    local entries = {}
+    if r.activeQE then entries[#entries + 1] = { qe = r.activeQE, active = true } end
+    if r.queue then
+      for _, qe in ipairs(r.queue) do
+        if qe ~= r.activeQE then entries[#entries + 1] = { qe = qe, active = false } end
+      end
+    end
+    for _, e in ipairs(entries) do
+      local t = e.qe.tile
+      if t and t.y <= C.GRID_H then
+        local sx, sy = State.tileToScreen(t.x, t.y)
+        local cx = sx + C.TILE - 16
+        local cy = sy + C.TILE - 16
+        local rc = r.color or { 1, 1, 1 }
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.circle("fill", cx, cy, 12)
+        love.graphics.setColor(rc[1], rc[2], rc[3], e.active and 1 or 0.85)
+        love.graphics.setLineWidth(e.active and 2 or 1)
+        love.graphics.circle("line", cx, cy, 12)
+        love.graphics.setLineWidth(1)
+        local glyph = C.TASK_GLYPH[e.qe.task]
+        local tint = C.TASK_TINT[e.qe.task] or { 1, 1, 1 }
+        if glyph then
+          drawCenteredEmojiTinted(fontEmoji, glyph, cx, cy, 16 / EMOJI_NATIVE, tint)
+        end
       end
     end
   end
@@ -990,6 +1066,12 @@ local function drawHud()
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print(txt, b.x + b.w - tw - 5, b.y + b.h - 16)
       end
+    elseif b.opts.plantCropEmoji then
+      local emojiScale = 22 / EMOJI_NATIVE
+      drawCenteredEmojiTinted(fontEmojiBig, b.opts.plantCropEmoji, b.x + 16, b.y + b.h * 0.5, emojiScale, b.opts.plantCropTint)
+      love.graphics.setFont(fontUI)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.print(b.label, b.x + 32, b.y + 10)
     elseif b.opts.digIcon then
       drawCenteredEmoji(fontEmojiBig, "🪏", b.x + b.w * 0.5, b.y + b.h * 0.5, 28 / EMOJI_NATIVE)
     elseif b.opts.centerLabel then
@@ -1038,9 +1120,9 @@ local function drawHud()
   local helpY = 1080 - 60
   love.graphics.setFont(fontUISmall)
   love.graphics.setColor(0.55, 0.55, 0.65, 1)
-  love.graphics.print("LMB: harvest, plant selected crop, or use active action.", C.HUD_X, helpY)
-  love.graphics.print("RMB/MMB: cancel mode, else queue nearest robot for tile.", C.HUD_X, helpY + 16)
-  love.graphics.print("Action bar: stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
+  love.graphics.print("LMB: queue robot to act on tile (active toggle or contextual).", C.HUD_X, helpY)
+  love.graphics.print("RMB: cancel queued/active task on tile (refunds reservation).", C.HUD_X, helpY + 16)
+  love.graphics.print("Toggles: pointer / stick / fert / shovel / restrict. Sticks breed adj ripe.", C.HUD_X, helpY + 32)
 
 end
 
@@ -1164,135 +1246,101 @@ local function flashTile(tile, color)
   end
 end
 
+local function evaluateTileAction(tile)
+  if tile.weed then return "Weed" end
+  if tile.state == "wild" then return "Till" end
+  if tile.state == "growing" and tile.crop then
+    if tile.crop.water <= C.WATER_REFILL_GATE then return "Water" end
+    return "Summon"
+  end
+  if tile.state == "ripe" then return "Harvest" end
+  if tile.state == "tilled" then return "Summon" end
+  return nil
+end
+
+local function queueOrFlash(tile, task, payload, refund)
+  local robot, qe, status = State.queueTask(tile, task, payload)
+  if not robot then
+    if refund then refund() end
+    flashTile(tile)
+    return false
+  end
+  if status == "exists" then
+    flashTile(tile, { 0.3, 0.8, 1 })
+    if refund then refund() end
+    return false
+  end
+  Sounds.play("queue")
+  flashTile(tile, { 0.3, 0.8, 1 })
+  return true
+end
+
 local function handleLMB(tile)
   if State.restrictMode then
     tile.restrict = not tile.restrict
     Sounds.play("click")
     return
   end
-  if State.stickMode then
-    if tile.state == "tilled" and State.sticks > 0 then
-      State.sticks = State.sticks - 1
-      tile.state = "stick"
-      tile.crop = nil
-      Sounds.play("plant")
-      if State.sticks <= 0 then State.stickMode = false end
-    else
-      flashTile(tile)
-    end
-    return
-  end
-  if State.fertMode then
-    local applyOK = (tile.state == "tilled" or tile.state == "growing" or tile.state == "ripe" or tile.state == "stick")
-    if applyOK and (State.fertInventory[State.fertMode] or 0) > 0 then
-      State.applyFert(tile, State.fertMode)
-      Sounds.play("fert")
-      if (State.fertInventory[State.fertMode] or 0) <= 0 then
-        State.fertMode = nil
-      end
-    else
-      flashTile(tile)
-    end
-    return
-  end
-  if State.digToggle then
-    if tile.crop then
-      State.addCrop(tile.crop.pheno.cropIndex, tile.crop.pheno.tier)
-      tile.crop = nil
-      tile.state = "tilled"
-      Sounds.play("click")
-      return
-    end
-    if tile.state == "stick" then
+
+  if State.stickMode and tile.state == "tilled" and State.sticks > 0 then
+    State.sticks = State.sticks - 1
+    local ok = queueOrFlash(tile, "PlaceStick", {}, function()
       State.sticks = State.sticks + 1
-      tile.state = "tilled"
-      Sounds.play("click")
+    end)
+    if ok and State.sticks <= 0 then State.stickMode = false end
+    return
+  end
+
+  if State.fertMode then
+    local key = State.fertMode
+    local applyOK = (tile.state == "tilled" or tile.state == "growing"
+                     or tile.state == "ripe" or tile.state == "stick")
+    if applyOK and (State.fertInventory[key] or 0) > 0 then
+      State.fertInventory[key] = State.fertInventory[key] - 1
+      local ok = queueOrFlash(tile, "Fertilize", { key = key }, function()
+        State.fertInventory[key] = (State.fertInventory[key] or 0) + 1
+      end)
+      if ok and (State.fertInventory[key] or 0) <= 0 then State.fertMode = nil end
       return
     end
-    flashTile(tile)
+  end
+
+  if State.digToggle and (tile.crop or tile.state == "stick") then
+    queueOrFlash(tile, "Dig", nil)
     return
   end
-  if tile.state == "ripe" then
-    if require("farm.harvest").harvestTile(tile) then
-      Sounds.play("harvest")
-    end
-    return
-  end
-  if tile.state == "tilled" then
-    local cropIdx = State.selectedCropIdx
-    local tier = State.selectedCropTier
-    if cropIdx and tier and State.takeCrop(cropIdx, tier) then
+
+  if State.selectedCropIdx and State.selectedCropTier
+     and tile.state == "tilled" and not tile.crop then
+    local cropIdx, tier = State.selectedCropIdx, State.selectedCropTier
+    if State.takeCrop(cropIdx, tier) then
       local genome = Genetics.baseGenome(cropIdx, tier)
-      tile.crop = {
-        genome = genome,
-        pheno  = Genetics.phenotype(genome),
-        growth = 0,
-        water  = 1.0,
-      }
-      tile.state = "growing"
-      if State.cropCount(cropIdx, tier) <= 0 then
+      local payload = { cropIdx = cropIdx, tier = tier, genome = genome }
+      local ok = queueOrFlash(tile, "Plant", payload, function()
+        State.addCrop(cropIdx, tier)
+      end)
+      if ok and State.cropCount(cropIdx, tier) <= 0 then
         State.advanceSelectionFrom(cropIdx, tier)
       end
-      Sounds.play("plant")
       return
     end
   end
-  flashTile(tile)
-end
 
-local function handleMMB(tile)
-  local needed
-  if tile.weed then
-    needed = "Weed"
-  elseif tile.state == "wild" then
-    needed = "Till"
-  elseif tile.state == "growing" and tile.crop then
-    needed = "Water"
-  end
-  if not needed then
-    flashTile(tile); return
-  end
-  for _, r in ipairs(State.robots) do
-    if r.workTile == tile then
-      flashTile(tile, { 0.3, 0.8, 1 })
-      return
-    end
-    for _, q in ipairs(r.queue) do
-      if q == tile then
-        flashTile(tile, { 0.3, 0.8, 1 })
-        return
-      end
-    end
-  end
-  local best, bestDist
-  for _, r in ipairs(State.robots) do
-    local dx, dy = tile.x - r.px, tile.y - r.py
-    local d = dx*dx + dy*dy
-    if not bestDist or d < bestDist then
-      bestDist = d; best = r
-    end
-  end
-  if not best then
-    flashTile(tile); return
-  end
-  best.queue[#best.queue + 1] = tile
-  best.pingUntil = State.time + 0.5
-  flashTile(tile, { 0.3, 0.8, 1 })
-  Sounds.play("queue")
-  if best.state ~= "idle" and not best.activeTask then
-    best.state = "idle"
-    best.idleTimer = 0
-    best.workTile = nil
-    best.workTimer = 0
+  local task = evaluateTileAction(tile)
+  if task then
+    queueOrFlash(tile, task, nil)
+  else
+    flashTile(tile)
   end
 end
 
 local function handleRMB(tile)
-  if State.stickMode or State.fertMode or State.digToggle or State.restrictMode or State.selectedCropIdx then
-    State.clearModes()
-    return
+  if State.cancelTileTask(tile) then
+    Sounds.play("click")
+    flashTile(tile, { 1, 0.6, 0.3 })
+  else
+    flashTile(tile)
   end
-  handleMMB(tile)
 end
 
 function Farm.mousepressed(x, y, btn)
@@ -1339,11 +1387,23 @@ function Farm.mousepressed(x, y, btn)
 
   if tile.y > State.unlockedRows then
     if btn == 1 then
-      if State.tryUnlockRow(tile.y) then
-        Sounds.play("unlock")
+      if State.canUnlockRow(tile.y) then
+        local payload = State.reserveUnlock(tile.y)
+        if payload then
+          queueOrFlash(tile, "Unlock", payload, function()
+            State.money = State.money + payload.cost
+            for _, item in ipairs(payload.taken or {}) do
+              State.addCrop(item.cropIdx, item.tier)
+            end
+          end)
+        else
+          flashTile(tile)
+        end
       else
         flashTile(tile)
       end
+    elseif btn == 2 then
+      handleRMB(tile)
     end
     return
   end
@@ -1352,8 +1412,6 @@ function Farm.mousepressed(x, y, btn)
     handleLMB(tile)
   elseif btn == 2 then
     handleRMB(tile)
-  elseif btn == 3 then
-    handleMMB(tile)
   end
 end
 

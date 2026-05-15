@@ -5,11 +5,19 @@ local Sounds = require("farm.sounds")
 
 local Sim = {}
 
-local function tileMatchesTask(t, task)
-  if task == "Till" then return t.state == "wild" and not t.weed
-  elseif task == "Water" then return t.state == "growing" and t.crop and t.crop.water <= C.WATER_REFILL_GATE
-  elseif task == "Weed" then return t.weed and true or false
-  elseif task == "Replant" then return t.state == "ripe" and not t.restrict
+local function tileMatchesAutonomousTask(robot, t, task)
+  if task == "Till" then
+    return t.state == "wild" and not t.weed
+  elseif task == "Water" then
+    return t.state == "growing" and t.crop and t.crop.water <= C.WATER_REFILL_GATE
+  elseif task == "Weed" then
+    return t.weed and true or false
+  elseif task == "Harvest" then
+    return t.state == "ripe"
+  elseif task == "Plant" then
+    if t.state ~= "tilled" or t.restrict or t.weed then return false end
+    if not robot.plantCrop then return false end
+    return State.firstAvailableTier(robot.plantCrop) ~= nil
   end
   return false
 end
@@ -21,7 +29,7 @@ local function findJobForTask(robot, task, claimed)
   for y = 1, State.unlockedRows do
     for x = 1, C.GRID_W do
       local t = State.tiles[y][x]
-      if tileMatchesTask(t, task) and not claimed[t] then
+      if tileMatchesAutonomousTask(robot, t, task) and not claimed[t] then
         local dx, dy = x - robot.px, y - robot.py
         local d = dx*dx + dy*dy
         if not bestDist or d < bestDist then
@@ -67,17 +75,18 @@ local function pickClosestEmpty(robot)
   return best, bestDist
 end
 
-local function neededTaskFor(tile)
-  if not tile then return nil end
-  if tile.weed then return "Weed" end
-  if tile.state == "wild" then return "Till" end
-  if tile.state == "growing" and tile.crop then return "Water" end
-  if tile.state == "ripe" and not tile.restrict then return "Replant" end
-  return nil
+local function plantPayloadOnTile(tile, payload)
+  tile.crop = {
+    genome = payload.genome,
+    pheno  = Genetics.phenotype(payload.genome),
+    growth = 0,
+    water  = 1.0,
+  }
+  tile.state = "growing"
 end
 
-local function performWork(robot, tile)
-  local task = robot.activeTask or robot.task
+local function performWork(robot, tile, qe)
+  local task = (qe and qe.task) or robot.activeTask or robot.task
   if task == "Till" then
     if tile.state == "wild" and not tile.weed then
       tile.state = "tilled"
@@ -88,22 +97,71 @@ local function performWork(robot, tile)
     end
   elseif task == "Weed" then
     tile.weed = false
-  elseif task == "Replant" then
+  elseif task == "Harvest" then
     if tile.state == "ripe" and tile.crop then
-      local clonedGenome = Genetics.cloneGenome(tile.crop.genome)
-      local pheno = tile.crop.pheno
-      State.money = State.money + pheno.yield
+      local ph = tile.crop.pheno
+      State.addCrop(ph.cropIndex, ph.tier)
       local cx, cy = State.tileCenter(tile.x, tile.y)
-      State.addPopup(cx, cy, "+$" .. pheno.yield)
-      tile.crop = {
-        genome = clonedGenome,
-        pheno  = Genetics.phenotype(clonedGenome),
-        growth = 0,
-        water  = 1.0,
-      }
-      tile.state = "growing"
+      State.addCropPopup(cx, cy, ph.cropIndex, ph.tier)
+      tile.crop = nil
+      tile.state = "tilled"
     end
+  elseif task == "Plant" then
+    if tile.state == "tilled" and not tile.crop then
+      if qe and qe.payload then
+        plantPayloadOnTile(tile, qe.payload)
+      elseif robot.plantCrop then
+        local tier = State.firstAvailableTier(robot.plantCrop)
+        if tier and State.takeCrop(robot.plantCrop, tier) then
+          local genome = Genetics.baseGenome(robot.plantCrop, tier)
+          plantPayloadOnTile(tile, { genome = genome })
+        end
+      end
+    end
+  elseif task == "PlaceStick" then
+    if tile.state == "tilled" then
+      tile.state = "stick"
+      tile.crop = nil
+    else
+      State.sticks = State.sticks + 1
+    end
+  elseif task == "Fertilize" then
+    if qe and qe.payload and qe.payload.key then
+      local key = qe.payload.key
+      local applyOK = (tile.state == "tilled" or tile.state == "growing"
+                       or tile.state == "ripe" or tile.state == "stick")
+      if applyOK then
+        State.fertInventory[key] = (State.fertInventory[key] or 0) + 1
+        State.applyFert(tile, key)
+      else
+        State.fertInventory[key] = (State.fertInventory[key] or 0) + 1
+      end
+    end
+  elseif task == "Dig" then
+    if tile.crop then
+      State.addCrop(tile.crop.pheno.cropIndex, tile.crop.pheno.tier)
+      tile.crop = nil
+      tile.state = "tilled"
+    elseif tile.state == "stick" then
+      State.sticks = State.sticks + 1
+      tile.state = "tilled"
+    end
+  elseif task == "Unlock" then
+    if qe and qe.payload then
+      State.unlockedRows = math.max(State.unlockedRows, tile.y)
+    end
+  elseif task == "Summon" then
+    -- no-op; arrival is the payload
   end
+end
+
+local function startQueueEntry(robot, qe)
+  robot.activeQE = qe
+  robot.activeTask = qe.task
+  robot.workTile = qe.tile
+  robot.targetTx = qe.tile.x
+  robot.targetTy = qe.tile.y
+  robot.state = "moving"
 end
 
 local function updateRobot(robot, dt)
@@ -112,14 +170,9 @@ local function updateRobot(robot, dt)
     if robot.idleTimer > 0 then return end
 
     while robot.queue and #robot.queue > 0 do
-      local target = robot.queue[1]
-      local task = neededTaskFor(target)
-      if task then
-        robot.activeTask = task
-        robot.workTile = target
-        robot.targetTx = target.x
-        robot.targetTy = target.y
-        robot.state = "moving"
+      local qe = robot.queue[1]
+      if qe and qe.tile then
+        startQueueEntry(robot, qe)
         return
       else
         table.remove(robot.queue, 1)
@@ -128,6 +181,7 @@ local function updateRobot(robot, dt)
 
     local tile, matchedTask = findRobotJob(robot)
     if tile then
+      robot.activeQE = nil
       robot.activeTask = matchedTask
       robot.workTile = tile
       robot.targetTx = tile.x
@@ -136,6 +190,7 @@ local function updateRobot(robot, dt)
     else
       local rest, restDist = pickClosestEmpty(robot)
       if rest and restDist and restDist > 0.01 then
+        robot.activeQE = nil
         robot.activeTask = nil
         robot.workTile = nil
         robot.targetTx = rest.x
@@ -154,9 +209,23 @@ local function updateRobot(robot, dt)
       robot.px = robot.targetTx
       robot.py = robot.targetTy
       if robot.workTile then
-        robot.state = "working"
-        local workMult = 1 + ((robot.level or 1) - 1) * C.ROBOT_WORK_MULT_PER_LEVEL
-        robot.workTimer = (C.WORK_TIME[robot.activeTask or robot.task] or 1.0) / workMult
+        if robot.activeTask == "Summon" then
+          robot.activeTask = nil
+          robot.workTile = nil
+          if robot.activeQE then
+            robot.queue = robot.queue or {}
+            for i, qe in ipairs(robot.queue) do
+              if qe == robot.activeQE then table.remove(robot.queue, i); break end
+            end
+            robot.activeQE = nil
+          end
+          robot.state = "idle"
+          robot.idleTimer = 0.05
+        else
+          robot.state = "working"
+          local workMult = 1 + ((robot.level or 1) - 1) * C.ROBOT_WORK_MULT_PER_LEVEL
+          robot.workTimer = (C.WORK_TIME[robot.activeTask or robot.task] or 1.0) / workMult
+        end
       else
         robot.state = "idle"
         robot.idleTimer = 1.0
@@ -169,12 +238,15 @@ local function updateRobot(robot, dt)
     robot.workTimer = robot.workTimer - dt
     if robot.workTimer <= 0 then
       if robot.workTile then
-        performWork(robot, robot.workTile)
+        performWork(robot, robot.workTile, robot.activeQE)
         Sounds.play("work")
       end
-      if robot.activeTask and robot.queue and robot.queue[1] == robot.workTile then
-        table.remove(robot.queue, 1)
+      if robot.activeQE and robot.queue then
+        for i, qe in ipairs(robot.queue) do
+          if qe == robot.activeQE then table.remove(robot.queue, i); break end
+        end
       end
+      robot.activeQE = nil
       robot.activeTask = nil
       robot.workTile = nil
       robot.state = "idle"

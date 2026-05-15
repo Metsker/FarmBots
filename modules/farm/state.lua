@@ -98,6 +98,7 @@ function State.newRobot(tx, ty, task)
     targetTx = tx, targetTy = ty,
     task = task or "Till",
     task2 = nil,
+    plantCrop = nil,
     state = "idle",
     workTimer = 0,
     workTile = nil,
@@ -106,6 +107,7 @@ function State.newRobot(tx, ty, task)
     color = { cr, cg, cb },
     queue = {},
     activeTask = nil,
+    activeQE = nil,
   }
 end
 
@@ -440,6 +442,184 @@ function State.tryUnlockRow(y)
     end
   end
   State.unlockedRows = y
+  return true
+end
+
+local function takeLowestTierAtOrAbove(cropIdx, minTier)
+  local byCrop = State.crops[cropIdx]
+  if not byCrop then return nil end
+  local bestT
+  for t, n in pairs(byCrop) do
+    if t >= minTier and n > 0 then
+      if not bestT or t < bestT then bestT = t end
+    end
+  end
+  if not bestT then return nil end
+  byCrop[bestT] = byCrop[bestT] - 1
+  if byCrop[bestT] <= 0 then byCrop[bestT] = nil end
+  return bestT
+end
+
+function State.firstAvailableTier(cropIdx)
+  local byCrop = State.crops[cropIdx]
+  if not byCrop then return nil end
+  local bestT
+  for t, n in pairs(byCrop) do
+    if n > 0 then
+      if not bestT or t < bestT then bestT = t end
+    end
+  end
+  return bestT
+end
+
+function State.reserveUnlock(y)
+  local cost = State.rowUnlockCost(y) or 0
+  if State.money < cost then return nil end
+  local reqs = State.rowUnlockReqs(y)
+  local taken = {}
+  if reqs then
+    for _, r in ipairs(reqs) do
+      for _ = 1, r.count do
+        local t = takeLowestTierAtOrAbove(r.crop, r.tier)
+        if not t then
+          for _, item in ipairs(taken) do
+            State.addCrop(item.cropIdx, item.tier)
+          end
+          return nil
+        end
+        taken[#taken + 1] = { cropIdx = r.crop, tier = t }
+      end
+    end
+  end
+  State.money = State.money - cost
+  return { cost = cost, taken = taken }
+end
+
+function State.findNearestRobot(tile)
+  local best, bestDist
+  for _, r in ipairs(State.robots) do
+    local dx, dy = tile.x - r.px, tile.y - r.py
+    local d = dx * dx + dy * dy
+    if not bestDist or d < bestDist then
+      bestDist = d
+      best = r
+    end
+  end
+  return best
+end
+
+function State.tileQueueRef(tile)
+  if not tile then return nil end
+  for _, r in ipairs(State.robots) do
+    if r.activeQE and r.activeQE.tile == tile then
+      return r, r.activeQE, true
+    end
+    if r.queue then
+      for i, qe in ipairs(r.queue) do
+        if qe.tile == tile then return r, qe, false end
+      end
+    end
+  end
+  return nil
+end
+
+local function refundQE(qe)
+  if not qe then return end
+  local task = qe.task
+  local p = qe.payload
+  if task == "Plant" and p then
+    State.addCrop(p.cropIdx, p.tier)
+  elseif task == "PlaceStick" then
+    State.sticks = State.sticks + 1
+  elseif task == "Fertilize" and p then
+    State.fertInventory[p.key] = (State.fertInventory[p.key] or 0) + 1
+  elseif task == "Unlock" and p then
+    State.money = State.money + (p.cost or 0)
+    if p.taken then
+      for _, item in ipairs(p.taken) do
+        State.addCrop(item.cropIdx, item.tier)
+      end
+    end
+  end
+end
+
+function State.queueTask(tile, task, payload)
+  local existingRobot, existingQE, isActive = State.tileQueueRef(tile)
+  if existingRobot then
+    if not isActive then
+      for i, qe in ipairs(existingRobot.queue) do
+        if qe == existingQE then
+          table.remove(existingRobot.queue, i)
+          table.insert(existingRobot.queue, 1, qe)
+          if existingRobot.activeQE == nil
+            and (existingRobot.state ~= "moving" and existingRobot.state ~= "working") then
+            existingRobot.state = "idle"
+            existingRobot.idleTimer = 0
+          end
+          return existingRobot, qe, "bumped"
+        end
+      end
+    end
+    return existingRobot, existingQE, "exists"
+  end
+
+  local robot = State.findNearestRobot(tile)
+  if not robot then return nil end
+  local qe = { tile = tile, task = task, payload = payload }
+  robot.queue = robot.queue or {}
+  if robot.activeQE == nil and (robot.state == "moving" or robot.state == "working") then
+    robot.activeTask = nil
+    robot.workTile = nil
+    robot.workTimer = 0
+    robot.state = "idle"
+    robot.idleTimer = 0
+    table.insert(robot.queue, 1, qe)
+  else
+    robot.queue[#robot.queue + 1] = qe
+    if robot.state == "idle" then
+      robot.idleTimer = 0
+    end
+  end
+  robot.pingUntil = State.time + 0.5
+  return robot, qe, "queued"
+end
+
+function State.clearRobotQueue(robot)
+  if not robot then return end
+  if robot.activeQE then
+    refundQE(robot.activeQE)
+    robot.activeQE = nil
+    robot.activeTask = nil
+    robot.workTile = nil
+    robot.workTimer = 0
+    robot.state = "idle"
+    robot.idleTimer = 0
+  end
+  if robot.queue then
+    for _, qe in ipairs(robot.queue) do
+      refundQE(qe)
+    end
+  end
+  robot.queue = {}
+end
+
+function State.cancelTileTask(tile)
+  local robot, qe, isActive = State.tileQueueRef(tile)
+  if not robot then return false end
+  refundQE(qe)
+  if isActive then
+    robot.activeQE = nil
+    robot.activeTask = nil
+    robot.workTile = nil
+    robot.workTimer = 0
+    robot.state = "idle"
+    robot.idleTimer = 0
+  end
+  if robot.queue then
+    for i, e in ipairs(robot.queue) do
+      if e == qe then table.remove(robot.queue, i); break end
+    end
+  end
   return true
 end
 
