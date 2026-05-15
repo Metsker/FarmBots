@@ -165,7 +165,7 @@ local function performWork(robot, tile, qe)
         and left.state == "tilled" and not left.weed and not left.breederId
         and mid.state  == "tilled" and not mid.weed  and not mid.breederId
         and right.state== "tilled" and not right.weed and not right.breederId then
-        State.registerBreeder(left, mid, right)
+        State.registerBreeder(left, mid, right, qe.payload.cost)
       else
         State.money = State.money + (qe.payload.cost or 0)
       end
@@ -184,7 +184,24 @@ local function performWork(robot, tile, qe)
     end
   elseif task == "Dig" then
     if tile.breederId then
-      State.removeBreeder(tile.breederId)
+      if tile.crop then
+        State.addCrop(tile.crop.pheno.cropIndex, tile.crop.pheno.tier)
+        tile.crop = nil
+        if tile.breederMiddle then
+          tile.state = "breeder"
+        else
+          tile.state = "tilled"
+        end
+      else
+        local b = State.breeders and State.breeders[tile.breederId]
+        local refund = b and b.cost and math.floor(b.cost * 0.5) or 0
+        if refund > 0 then
+          State.money = State.money + refund
+          local cx, cy = State.tileCenter(tile.x, tile.y)
+          State.addPopup(cx, cy, "+$" .. refund)
+        end
+        State.removeBreeder(tile.breederId)
+      end
     elseif tile.crop then
       State.addCrop(tile.crop.pheno.cropIndex, tile.crop.pheno.tier)
       tile.crop = nil

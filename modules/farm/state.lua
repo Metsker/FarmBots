@@ -372,7 +372,7 @@ function State.canPlaceBreederAt(cx, cy)
   return left, mid, right
 end
 
-function State.registerBreeder(leftTile, midTile, rightTile)
+function State.registerBreeder(leftTile, midTile, rightTile, cost)
   local id = State.nextBreederId
   State.nextBreederId = id + 1
   leftTile.breederId = id
@@ -388,6 +388,7 @@ function State.registerBreeder(leftTile, midTile, rightTile)
   midTile.crop = nil
   State.breeders[id] = {
     id = id,
+    cost = cost or 0,
     leftX = leftTile.x, leftY = leftTile.y,
     midX = midTile.x, midY = midTile.y,
     rightX = rightTile.x, rightY = rightTile.y,

@@ -82,6 +82,7 @@ local function snapshotBreeders()
   for id, b in pairs(State.breeders or {}) do
     out[#out + 1] = {
       id = id,
+      cost = b.cost or 0,
       leftX = b.leftX, leftY = b.leftY,
       midX = b.midX, midY = b.midY,
       rightX = b.rightX, rightY = b.rightY,
@@ -206,6 +207,7 @@ function Save.load()
   for _, b in ipairs(data.breeders or {}) do
     State.breeders[b.id] = {
       id = b.id,
+      cost = b.cost or 0,
       leftX = b.leftX, leftY = b.leftY,
       midX = b.midX, midY = b.midY,
       rightX = b.rightX, rightY = b.rightY,
