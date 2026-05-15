@@ -157,7 +157,9 @@ local function performWork(robot, tile, qe)
       else
         local cropIdx = plantCropForTile(robot, tile)
         if cropIdx then
-          local tier = State.firstAvailableTier(cropIdx)
+          local tier = tile.parentSlot
+            and State.bestAvailableTier(cropIdx)
+            or State.firstAvailableTier(cropIdx)
           if tier and State.takeCrop(cropIdx, tier) then
             local genome = Genetics.baseGenome(cropIdx, tier)
             plantPayloadOnTile(tile, { genome = genome })

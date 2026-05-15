@@ -641,6 +641,18 @@ function State.firstAvailableTier(cropIdx)
   return bestT
 end
 
+function State.bestAvailableTier(cropIdx)
+  local byCrop = State.crops[cropIdx]
+  if not byCrop then return nil end
+  local bestT
+  for t, n in pairs(byCrop) do
+    if n > 0 then
+      if not bestT or t > bestT then bestT = t end
+    end
+  end
+  return bestT
+end
+
 function State.reserveUnlock(y)
   local cost = State.rowUnlockCost(y) or 0
   if State.money < cost then return nil end
