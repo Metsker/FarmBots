@@ -10,10 +10,10 @@ local C = {
   ACTION_BTN_GAP = 6,
 
   STARTING_ROWS = 1,
-  ROW_UNLOCK_COSTS = { 250, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  ROW_UNLOCK_COSTS = { 100, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
   ROW_UNLOCK_ROBOT_REQS = { [2] = 4 },
   ROW_UNLOCK_REWARDS = {
-    [1] = { robot = true },
+    [1] = { robot = true, crops = { { crop = 2, tier = 1, count = 5 } } },
     [2] = { breeder = true },
     [3] = { money = 50 },
     [4] = { money = 200 },
@@ -29,8 +29,7 @@ local C = {
 
   STARTER_MONEY = 0,
   STARTER_INVENTORY = {
-    { crop = 1, tier = 1, count = 3 },
-    { crop = 2, tier = 1, count = 3 },
+    { crop = 1, tier = 1, count = 5 },
   },
 
   HUD_X = 1444,

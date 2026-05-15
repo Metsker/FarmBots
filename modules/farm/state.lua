@@ -578,6 +578,15 @@ function State.applyUnlockReward(y)
     State.money = State.money + reward.money
     State.addPopup(rowCenterX, rowCenterY, "+$" .. reward.money)
   end
+  if reward.crops then
+    for i, c in ipairs(reward.crops) do
+      for _ = 1, c.count do
+        State.addBoughtCrop(c.crop, c.tier)
+      end
+      local px, py = State.tileCenter(math.floor(C.GRID_W * 0.5) + (i - 1), y)
+      State.addCropPopup(px, py - 24, c.crop, c.tier)
+    end
+  end
   if reward.robot then
     local rx = C.GRID_W * 0.5
     State.robots[#State.robots + 1] = State.newRobot(rx, y, "Till")
