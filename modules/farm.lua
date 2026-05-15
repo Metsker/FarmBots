@@ -366,9 +366,48 @@ local function rebuildHudButtons()
       { disabled = State.money < upCost, sound = "buy", tooltip = { kind = "fertUp", key = key } })
   end
 
+  if State.openDropdown and string.sub(State.openDropdown, 1, 11) == "parentslot_" then
+    local _, _, txStr, tyStr = string.find(State.openDropdown, "^parentslot_(%d+)_(%d+)$")
+    local tx, ty = tonumber(txStr), tonumber(tyStr)
+    local tile = (tx and ty) and State.tileAt(tx, ty) or nil
+    if tile and tile.parentSlot then
+      local popW = math.max(btnW("Watermelon"), 140)
+      local sx, sy = State.tileToScreen(tile.x, tile.y)
+      local popX = sx + C.TILE - 4
+      if popX + popW > C.HUD_X - 16 then popX = sx - popW + 4 end
+      local popY = sy
+      pendingPopups[#pendingPopups + 1] = {
+        kind = "parentSlot", tile = tile, x = popX, y = popY, w = popW,
+      }
+    else
+      State.openDropdown = nil
+    end
+  end
+
   for _, pop in ipairs(pendingPopups) do
     local popY = pop.y
-    if pop.kind == "plantCrop" then
+    if pop.kind == "parentSlot" then
+      local tile = pop.tile
+      hudBtn("parentslot_pop_" .. tile.x .. "_" .. tile.y .. "_none", pop.x, popY, pop.w, BTN_H, "—",
+        function()
+          tile.parentSlot.crop = nil
+          State.openDropdown = nil
+        end,
+        { active = (tile.parentSlot.crop == nil), popupItem = true })
+      popY = popY + BTN_H + 2
+      for cropIdx, cinfo in ipairs(C.CROPS) do
+        local inStock = State.firstAvailableTier(cropIdx) ~= nil
+        if inStock or tile.parentSlot.crop == cropIdx then
+          hudBtn("parentslot_pop_" .. tile.x .. "_" .. tile.y .. "_" .. cropIdx, pop.x, popY, pop.w, BTN_H, cinfo.name,
+            function()
+              tile.parentSlot.crop = cropIdx
+              State.openDropdown = nil
+            end,
+            { active = (tile.parentSlot.crop == cropIdx), popupItem = true, plantCropEmoji = cinfo.emoji, plantCropTint = cinfo.color })
+          popY = popY + BTN_H + 2
+        end
+      end
+    elseif pop.kind == "plantCrop" then
       hudBtn("plantcrop_pop_" .. pop.robotIdx .. "_none", pop.x, popY, pop.w, BTN_H, "—",
         function()
           pop.robotRef.plantCrop = nil
@@ -1318,17 +1357,13 @@ local function handleLMB(tile)
     return
   end
 
-  -- Parent slot: click toggles the crop assignment using the
-  -- currently-selected inventory crop. Click again with the same crop to clear.
+  -- Parent slot: click opens a crop-picker dropdown anchored to the tile.
   if tile.parentSlot and tile.state == "tilled" and not tile.crop then
-    if not State.selectedCropIdx then
-      flashTile(tile)
-      return
-    end
-    if tile.parentSlot.crop == State.selectedCropIdx then
-      tile.parentSlot.crop = nil
+    local ddKey = "parentslot_" .. tile.x .. "_" .. tile.y
+    if State.openDropdown == ddKey then
+      State.openDropdown = nil
     else
-      tile.parentSlot.crop = State.selectedCropIdx
+      State.openDropdown = ddKey
     end
     Sounds.play("click")
     return
