@@ -66,7 +66,7 @@ local C = {
     { name="Mango",      emoji="🥭", color={1.00, 0.70, 0.20}, priceMult = 8,  yieldMult = 1 },
   },
 
-  BASE_PRICE = 10,
+  BASE_PRICE = 20,
 
   TIER_NAMES = { "E", "D", "C", "B", "A", "S" },
   TIER_COLORS = {
@@ -137,7 +137,7 @@ local C = {
   ROBOT_UPGRADE_BASE_COST = 100,
   ROBOT_UPGRADE_COST_EXP = 2.0,
   ROBOT_BASE_COST   = 50,
-  ROBOT_COST_EXP    = 2.4,
+  ROBOT_COST_EXP    = 2.0,
   ROBOT_CAP         = 12,
 
   SEED_BASE_COST = 50,
