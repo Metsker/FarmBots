@@ -7,7 +7,9 @@ local Save = require("farm.save")
 local Modals = require("farm.modals")
 local ok, Version = pcall(require, "version")
 if not ok then Version = { date = "dev", n = 0, sha = "dev" } end
-local VERSION_LABEL = string.format("v %s.%d", Version.date, Version.n)
+local _y, _m, _d = tostring(Version.date):match("^(%d%d%d%d)-(%d%d)-(%d%d)$")
+local _dateShort = (_y and _d .. "." .. _m .. "." .. _y:sub(3, 4)) or tostring(Version.date)
+local VERSION_LABEL = string.format("v%d|%s", Version.n, _dateShort)
 local Farm = {}
 
 
